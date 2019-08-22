@@ -26,8 +26,8 @@ def simpleNLL_np(y_pred, y_gt):
     muY = y_pred_pos[:, :, 1]
     sigX = np.maximum(y_pred[:, :, 2], eps)
     sigY = np.maximum(y_pred[:, :, 3], eps)
-    rho = y_pred[:, :, 4]
-    ohr = 1/(np.maximum(1 - rho * rho, eps_rho))
+    rho = np.clip(y_pred[:, :, 4], eps_rho-1, 1-eps_rho)
+    ohr = 1/(1 - rho * rho)
     x = y_gt[:, :, 0]
     y = y_gt[:, :, 1]
     diff_x = x - muX
@@ -35,7 +35,6 @@ def simpleNLL_np(y_pred, y_gt):
     z = ((diff_x * diff_x) / (sigX * sigX) + (diff_y * diff_y) / (sigY * sigY) -
          (2 * rho * diff_x * diff_y) / (sigX * sigY))
     nll = 0.5 * ohr * z + np.log(sigX * sigY) - 0.5*np.log(ohr) + np.log(np.pi*2)
-    nll = np.maximum(nll, 0)
     return nll
 
 if model_type == 'cv':
