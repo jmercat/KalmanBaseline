@@ -4,14 +4,15 @@ from torch.utils.data import DataLoader
 from logger import Logger
 from kalman_prediction import KalmanCV, KalmanLSTM
 from loadNGSIM import NGSIMDataset, maskedNLL, maskedMSE
+from ranger import Ranger
 
-name = 'Kalman_LSTM_nll'
+name = 'Kalman_nll'
 load_name = ''
-use_LSTM = True
+use_LSTM = False
 use_nll_loss = True
 n_epochs = 3
-batch_size = 128
-lr = 0.0003
+batch_size = 1024
+lr = 0.01
 dt = 0.2
 feet_to_meters = 0.3048
 logger = Logger('./logs/'+name)
@@ -31,7 +32,7 @@ else:
     if load_name != '':
         net.load_state_dict(torch.load('./trained_models/' + load_name + '.tar', map_location='cpu'))
 
-optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+optimizer = Ranger(net.parameters(), lr=lr)
 
 trDataloader = DataLoader(trSet, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=trSet.collate_fn)
 valDataloader = DataLoader(valSet, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=valSet.collate_fn)
@@ -73,7 +74,7 @@ for epoch_num in range(n_epochs):
 
         optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(net.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(net.parameters(), 10)
         optimizer.step()
 
         avg_nll_loss += nll_loss.detach()

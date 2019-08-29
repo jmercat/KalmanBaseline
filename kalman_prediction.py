@@ -10,12 +10,15 @@ class KalmanCV(nn.Module):
         self.dt = dt
         self.n_var = 4
 
-        self.velocity_std_x = nn.Parameter(torch.ones(1) * 0.1355)
-        self.velocity_std_y = nn.Parameter(torch.ones(1) * 20.0070)
-        self.acceleration_std_x = nn.Parameter(torch.ones(1) * 2.7710)
-        self.acceleration_std_y = nn.Parameter(torch.ones(1) * 6.2014)
-
-        self.GR_ = torch.tensor([1e-5, -1e-5])
+        self.position_std_x = nn.Parameter(torch.ones(1) * 0.12)
+        self.position_std_y = nn.Parameter(torch.ones(1) * 15.21)
+        self.velocity_std_x = nn.Parameter(torch.ones(1) * 0.014)
+        self.velocity_std_y = nn.Parameter(torch.ones(1) * 31.37)
+        self.acceleration_std_x = nn.Parameter(torch.ones(1) * 0.53)
+        self.acceleration_std_y = nn.Parameter(torch.ones(1) * 4.33)
+        self.GR_ = torch.tensor([[3.3850e-28, 5.0867e-19],
+                                 [-1.2177e-27, 6.0785e-19]])
+        # self.GR_ = torch.randn((2, 2)) * 1e-1
         self.GR_ = nn.Parameter(self.GR_)
 
         if torch.cuda.is_available():
@@ -35,11 +38,11 @@ class KalmanCV(nn.Module):
         self.G_[1] = dt
         self.G_[2] = dt * dt / 2
         self.G_[3] = dt
-        coef_G = torch.zeros(self.n_var)
-        coef_G[0] = -2.5296
-        coef_G[1] = 0.0723
-        coef_G[2] = -0.1533
-        coef_G[3] = -0.4032
+        # coef_G = torch.randn(self.n_var, self.n_var)
+        coef_G = torch.tensor([[-4.0431e-01, -6.2302e-03,  1.9845e+00, -4.9377e+00],
+                               [ 1.7677e-02,  8.6025e-05,  3.9515e-01,  4.6597e-02],
+                               [-1.0531e+00, -3.6640e-04,  2.8276e-02, -1.0620e-01],
+                               [-5.4513e-01,  5.8622e-05, -1.4437e-02,  2.4759e-02]])
         self.coef_G = nn.Parameter(coef_G)
 
         # Observation matrix that mask speeds and keeps positions
@@ -87,22 +90,25 @@ class KalmanCV(nn.Module):
     def _kalman_pred(self, X, P):
         X_pred = torch.matmul(self.F, X)
 
-        Q = torch.matmul((self.G_*torch.tanh(self.coef_G)).unsqueeze(1), (self.G_*torch.tanh(self.coef_G)).unsqueeze(0))
+        Rho = torch.matmul(self.coef_G, self.coef_G.transpose(1, 0))
+        Q = torch.matmul(self.G_.unsqueeze(1), self.G_.unsqueeze(0)) * Rho
         Q[:2, :2] *= self.acceleration_std_x * self.acceleration_std_x
         Q[2:, 2:] *= self.acceleration_std_y * self.acceleration_std_y
+        Q[:2, 2:] *= self.acceleration_std_x * self.acceleration_std_y
+        Q[2:, :2] *= self.acceleration_std_x * self.acceleration_std_y
 
         P_pred = torch.matmul(torch.matmul(self.F, P), self.F.transpose(1, 0)) + Q
 
         return X_pred, P_pred
 
     def _kalman_innovation(self, X, Z, P):
-        R = torch.matmul(self.GR_.unsqueeze(1), self.GR_.unsqueeze(0))
+        R = torch.matmul(self.GR_, self.GR_.transpose(1, 0))
         y = Z - torch.matmul(self.H, X)
         S = torch.matmul(torch.matmul(self.H, P), self.H_t) + R
         return y, S
 
     def _kalman_update(self, X, P, S, y):
-        R = torch.matmul(self.GR_.unsqueeze(1), self.GR_.unsqueeze(0))
+        R = torch.matmul(self.GR_, self.GR_.transpose(1, 0))
         K, _ = torch.solve(torch.matmul(self.H, P.transpose(2, 1)), S.transpose(2, 1))
         K = K.transpose(2, 1)
         X = X + torch.matmul(K, y)
@@ -123,11 +129,9 @@ class KalmanCV(nn.Module):
         else:
             P = torch.zeros(Z.shape[0], self.n_var, self.n_var)
 
-        R = torch.matmul(self.GR_.unsqueeze(1), self.GR_.unsqueeze(0))
-
-        P[:, 0, 0] = R[0, 0]
+        P[:, 0, 0] = self.position_std_x * self.position_std_x
         P[:, 1, 1] = self.velocity_std_x * self.velocity_std_x
-        P[:, 2, 2] = R[1, 1]
+        P[:, 2, 2] = self.position_std_y * self.position_std_y
         P[:, 3, 3] = self.velocity_std_y * self.velocity_std_y
 
         return X, P
@@ -141,30 +145,30 @@ class KalmanLSTM(nn.Module):
         self.dt = dt
         self.n_var = 6
         self.n_command = 2
-        self.feature_size = 32
+        self.feature_size = 128
         self.n_layers = 1
 
-        self.position_std_x = nn.Parameter(torch.ones(1) * 0.0519)
-        self.position_std_y = nn.Parameter(torch.ones(1) * 1.7321)
-        self.velocity_std_x = nn.Parameter(torch.ones(1) * 0.0360)
-        self.velocity_std_y = nn.Parameter(torch.ones(1) * 19.8837)
+        self.position_std_x = nn.Parameter(torch.ones(1) * 0.51)
+        self.position_std_y = nn.Parameter(torch.ones(1) * 6.24)
+        self.velocity_std_x = nn.Parameter(torch.ones(1) * 0.0016)
+        self.velocity_std_y = nn.Parameter(torch.ones(1) * 19.66)
         self.acceleration_std_x = nn.Parameter(torch.ones(1) * 1e-5)
-        self.acceleration_std_y = nn.Parameter(torch.ones(1) * 5.34)
+        self.acceleration_std_y = nn.Parameter(torch.ones(1) * 5.46)
         jerk_std = torch.ones(1, 2)
-        jerk_std[0, 0] *= 3.5043
-        jerk_std[0, 1] *= 17.0283
+        jerk_std[0, 0] *= 0.90
+        jerk_std[0, 1] *= 12.17
         self.jerk_std = nn.Parameter(jerk_std)
 
-        coef_G = torch.zeros(self.n_var, 1)
-        coef_G[0, 0] = 0.7427
-        coef_G[1, 0] = 2.3545
-        coef_G[2, 0] = -0.0247
-        coef_G[3, 0] = -0.1391
-        coef_G[4, 0] = 9.0110
-        coef_G[5, 0] = 0.0963
+        coef_G = torch.tensor(
+            [[5.2294e+00, -2.6389e+00, 1.8389e+00, 4.4642e+00, 8.6723e+00, -5.5184e+00],
+             [1.6056e+00, -8.1404e-01, 6.4966e-01, 1.4483e+00, 2.6705e+00, -1.6941e+00],
+             [-4.3528e-02, 2.2453e-02, -1.5272e-02, -3.4361e-02, -6.8364e-02, 4.5767e-02],
+             [1.9162e-02, -1.2546e-02, -6.6970e-01, -1.2119e+00, 7.2434e-02, -2.0197e-02],
+             [6.1042e-03, -3.1672e-03, -2.5424e-01, -5.1976e-01, 2.9036e-02, -6.3444e-03],
+             [-4.6360e-03, -2.6940e-03, -5.5129e-03, 3.6231e-02, -5.8934e-03, 5.3780e-03]])
         self.coef_G = nn.Parameter(coef_G)
 
-        self.GR_ = torch.tensor([-0.0015, 0.001])
+        self.GR_ = torch.tensor([[0.0004, 0.0004], [0.0003, 0.0002]])
         self.GR_ = nn.Parameter(self.GR_)
 
         if torch.cuda.is_available():
@@ -219,7 +223,7 @@ class KalmanLSTM(nn.Module):
                                          self.feature_size))
         self.LSTMcells = nn.ModuleList(LSTMcells)
 
-        self.command_out = nn.Linear(self.feature_size, self.n_command * 2)
+        self.command_out = nn.Linear(self.feature_size, self.n_command * (1 + self.n_command))
 
     def _init_LSTM(self, batch_size):
         if torch.cuda.is_available():
@@ -277,30 +281,28 @@ class KalmanLSTM(nn.Module):
 
     def _kalman_pred(self, X, P, command=None):
         X_pred = torch.matmul(self.F, X)
-        tanhG = torch.tanh(self.coef_G)
+        Rho = torch.matmul(self.coef_G, self.coef_G.transpose(1, 0))
+        Gs = (self.G_ * self.jerk_std).unsqueeze(0)
         if command is not None:
-            X_pred += torch.matmul(self.B, command[:, :2].unsqueeze(2))
-            Gs = torch.matmul(self.G_*tanhG, command[:, 2:].unsqueeze(2))
-        else:
-            Gs = (self.G_*tanhG*self.jerk_std).unsqueeze(0)
-        Q = torch.matmul(Gs, Gs.transpose(2, 1))
+            u = command[:, :2]
+            Gs = torch.matmul(Gs, command[:, 2:].view(command.shape[0], 2, 2))
+            X_pred += torch.matmul(self.B, u.unsqueeze(2))
+        Q = torch.matmul(Gs, Gs.transpose(2, 1)) * Rho
 
         P_pred = torch.matmul(torch.matmul(self.F, P), self.F.transpose(1, 0)) + Q
 
         return X_pred, P_pred
 
     def _kalman_innovation(self, X, Z, P):
-        R = torch.matmul(self.GR_.unsqueeze(1), self.GR_.unsqueeze(0))
+        R = torch.matmul(self.GR_, self.GR_.transpose(1, 0))
         y = Z - torch.matmul(self.H, X)
         S = torch.matmul(torch.matmul(self.H, P), self.H_t) + R
         return y, S
 
     def _kalman_update(self, X, P, S, y):
-        R = torch.matmul(self.GR_.unsqueeze(1), self.GR_.unsqueeze(0))
-        # K, _ = torch.solve(torch.matmul(self.H, P.transpose(2, 1)), S.transpose(2, 1))
-        # K = K.transpose(2, 1)
-        S_inv = torch.inverse(S)
-        K = torch.matmul(torch.matmul(P, self.H_t), S_inv)
+        R = torch.matmul(self.GR_, self.GR_.transpose(1, 0))
+        K, _ = torch.solve(torch.matmul(self.H, P.transpose(2, 1)), S.transpose(2, 1))
+        K = K.transpose(2, 1)
         X = X + torch.matmul(K, y)
 
         # Classic formula

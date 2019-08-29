@@ -10,8 +10,8 @@ from loadNGSIM import NGSIMDataset, maskedNLL
 from kalman_prediction import KalmanCV, KalmanLSTM
 
 name = ''
-batch_size = 128
-model_type = 'cv' # 'lstm'
+batch_size = 1024
+model_type = 'cv' # 'lstm' #
 
 def logsumexp_np(inputs, keepdim=False):
     s, _ = np.max(inputs, axis=3, keepdims=keepdim)
@@ -58,7 +58,7 @@ testDataloader = DataLoader(testSet, batch_size=batch_size, shuffle=True, num_wo
 
 net.train_flag = False
 it_testDataloader = iter(testDataloader)
-len_test = len(it_testDataloader) # Change this to 100 for a quick test
+len_test = len(it_testDataloader)
 avg_loss = 0
 hist_test = []
 fut_test = []
@@ -172,7 +172,7 @@ for i, index in enumerate(indices2):
 rmse_line = plt.plot(ADE[:, 1], ADE[:, 0], color='blue', label='RMSE_xy(t)')
 plt.xlabel('x (m)')
 plt.ylabel('y (m)')
-# plt.title('Evolution of the xy RMSE with global covariances at')
+plt.title('Evolution of the xy RMSE with global covariances at')
 plt.legend([Line2D([0], [0], color='b', label='RMSE_xy(t)'),
             ell_true, ell_pred],
            ['MAE_xy(t)', 'Global error covariance', 'Mean predicted error covariance'],
