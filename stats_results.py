@@ -211,5 +211,3 @@ plt.show()
 #     plt.axis('equal')
 #     plt.savefig('Outliers/outlier'+str(i).zfill(2))
 #     plt.close()
-
-
