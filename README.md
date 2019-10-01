@@ -1,7 +1,7 @@
 # Baseline Models
 
 This is a code for baseline production using Kalman filter.
-It is the implementation of the models presented in : [link]
+It is the implementation of the models presented in : https://arxiv.org/abs/1908.11472
 
 This may be quiet slow to train... contributions are welcome
 
