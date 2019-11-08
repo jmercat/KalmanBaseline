@@ -67,8 +67,7 @@ class DiscreteSlider(Slider):
 
 ## Network Arguments
 
-file_name = 'Kalman_nll'
-load_file_name = ''
+load_file_name = 'Kalman_nll'
 dt = 0.2
 feet_to_meters = 0.3048
 use_LSTM = False
@@ -82,10 +81,10 @@ else:
 if torch.cuda.is_available():
     net = net.cuda()
     if load_file_name != '':
-        net.load_state_dict(torch.load('./logs_een/' + file_name + '/' + file_name + '.tar'))
+        net.load_state_dict(torch.load('./trained_models/' + load_file_name + '.tar'))
 else:
     if load_file_name != '':
-        net.load_state_dict(torch.load('./logs_een/' + file_name + '/' + file_name + '.tar', map_location='cpu'))
+        net.load_state_dict(torch.load('./trained_models/' + load_file_name + '.tar', map_location='cpu'))
 
 if torch.cuda.is_available():
     net = net.cuda()
