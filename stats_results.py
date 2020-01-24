@@ -1,118 +1,60 @@
-import torch
-from torch.utils.data import DataLoader
 import numpy as np
+
 import matplotlib.pyplot as plt
 from matplotlib.legend_handler import HandlerPatch
 from matplotlib.patches import Ellipse
 from matplotlib.lines import Line2D
 
-from loadNGSIM import NGSIMDataset, maskedNLL
-from kalman_prediction import KalmanCV, KalmanLSTM
+from utils import Settings
+from losses import simpleNLL_np
 
-name = ''
-batch_size = 1024
-model_type = 'cv' # 'lstm' #
+args = Settings()
+# if args.dataset == 'NGSIM':
+#     x_axis = 1
+#     y_axis = 0
+# else:
+x_axis = 0
+y_axis = 1
 
-def logsumexp_np(inputs, keepdim=False):
-    s, _ = np.max(inputs, axis=3, keepdims=keepdim)
-    outputs = s + (inputs - s).exp().sum(axis=3, keepdims=keepdim).log()
-    return outputs
+try:
+    results = np.load('./results/' + args.load_name + '.npz')
+except FileNotFoundError as err:
+    raise FileNotFoundError('Could not find the results file "' + './results/' + args.name +
+          '.npz' + '", please run "save_results.py" before calling "stats_results.py".')
 
-def simpleNLL_np(y_pred, y_gt):
-    eps = 1e-1
-    eps_rho = 1e-2
-    y_pred_pos = y_pred[:, :, :2]
-    muX = y_pred_pos[:, :, 0]
-    muY = y_pred_pos[:, :, 1]
-    sigX = np.maximum(y_pred[:, :, 2], eps)
-    sigY = np.maximum(y_pred[:, :, 3], eps)
-    rho = np.clip(y_pred[:, :, 4], eps_rho-1, 1-eps_rho)
-    ohr = 1/(1 - rho * rho)
-    x = y_gt[:, :, 0]
-    y = y_gt[:, :, 1]
-    diff_x = x - muX
-    diff_y = y - muY
-    z = ((diff_x * diff_x) / (sigX * sigX) + (diff_y * diff_y) / (sigY * sigY) -
-         (2 * rho * diff_x * diff_y) / (sigX * sigY))
-    nll = 0.5 * ohr * z + np.log(sigX * sigY) - 0.5*np.log(ohr) + np.log(np.pi*2)
-    return nll
+hist_test = results['hist']
+mask_test = results['mask']
+fut_test = results['fut']
+pred_test = results['pred']
+# hist_test, mask_test, fut_test, pred_test = results['hist', 'mask', 'fut', 'pred']
 
-if model_type == 'cv':
-    net = KalmanCV(0.2)
-elif model_type == 'lstm':
-    net = KalmanLSTM(0.2)
 
-if torch.cuda.is_available():
-    net = net.cuda()
-    if name != '':
-        net.load_state_dict(torch.load('./trained_models/'+name+'.tar'))
-    testSet = NGSIMDataset('data/TestSet_traj_v2.mat',
-                           'data/TestSet_tracks_v2.mat')
-else:
-    if name != '':
-        net.load_state_dict(torch.load('./trained_models/'+name+'.tar', map_location='cpu'))
-    testSet = NGSIMDataset('data/TestSet_traj_v2.mat',
-                           'data/TestSet_tracks_v2.mat')
-
-testDataloader = DataLoader(testSet, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=testSet.collate_fn)
-
-net.train_flag = False
-it_testDataloader = iter(testDataloader)
-len_test = len(it_testDataloader)
-avg_loss = 0
-hist_test = []
-fut_test = []
-pred_test = []
-proba_man_test = []
-mask_test = []
-for j in range(len_test):
-    hist, fut = next(it_testDataloader)
-    if torch.cuda.is_available():
-        hist = hist.cuda()
-        fut = fut.cuda()
-
-    mask = torch.cumprod(1 - (fut[:, :, 0] == 0) * (fut[:, :, 1] == 0), dim=0).float()
-    hist *= 0.3048
-    fut *= 0.3048
-
-    fut_pred = net(hist, fut.shape[0])
-
-    hist_test.append(hist.cpu().data.numpy())
-    fut_test.append(fut.cpu().data.numpy())
-    mask_test.append(mask.cpu().data.numpy())
-    pred_test.append(fut_pred.cpu().data.numpy())
-
-    loss = maskedNLL(fut_pred, fut, mask, 2)
-    avg_loss += loss.detach()
-avg_loss = avg_loss.cpu().data.numpy()
-
-print('Test loss:', format(avg_loss / len_test, '0.4f'))
-hist_test = np.concatenate(hist_test, axis=1).astype('float64')
-mask_test = np.concatenate(mask_test, axis=1).astype('float64')
-fut_test = np.concatenate(fut_test, axis=1).astype('float64')
-pred_test = np.concatenate(pred_test, axis=1).astype('float64')
 nll_test = np.sum(simpleNLL_np(pred_test, fut_test)*mask_test, axis=1)/np.sum(mask_test, axis=1)
-err_test = fut_test - pred_test[:, :, :2]
+err_test = fut_test[:, :, :2] - pred_test[:, :, :2]
 tiled_mask = np.tile(mask_test[:, :, None], (1, 1, 2))
 bias_error = np.sum(err_test*tiled_mask, axis=1)/np.sum(tiled_mask, axis=1)
 bias_distance = np.sqrt(np.sum(bias_error*bias_error, axis=1))
-ADE = np.sum(np.abs(err_test)*tiled_mask, axis=1)/np.sum(tiled_mask, axis=1)
+FDE_xy = np.sum(np.abs(err_test)*tiled_mask, axis=1)/np.sum(tiled_mask, axis=1)
 dist_error = np.sum(err_test*err_test, axis=2)*mask_test
+miss_rate = np.sum((dist_error > 4)*mask_test, axis=1)/np.sum(mask_test, axis=1)
+FDE = np.sum(np.sqrt(dist_error*mask_test), axis=1)/np.sum(mask_test, axis=1)
 rmse_test = np.sqrt(np.sum(dist_error*mask_test, axis=1)/np.sum(mask_test, axis=1))
 rmse_xy_test = np.sqrt(np.sum(err_test*err_test*tiled_mask, axis=1)/
                        np.sum(tiled_mask, axis=1))
 
 std_err_test = []
 std_err_pred_mean = []
-indices = [4, 9, 14, 19, 24]
-indices2 = [4, 14, 24]
-print('bias x', bias_error[indices, 0])
-print('bias y', bias_error[indices, 1])
+indices = ((np.arange(5) + 1)*3/5/args.dt - 1).astype('int')
+indices2 = ((np.arange(3)*2 + 1)*3/5/args.dt - 1).astype('int')
+print('bias x', bias_error[indices, x_axis])
+print('bias y', bias_error[indices, y_axis])
 print('bias dist', bias_distance[indices])
 print("bias \%", 100 * bias_distance[indices]/rmse_test[indices])
-print('ADE', ADE[indices])
+print('FDE xy', FDE_xy[indices])
+print('FDE', FDE[indices])
 print('rmse', rmse_test[indices])
 print('nll', nll_test[indices])
+print('miss rate', miss_rate[indices])
 for i in indices2:
     std_err_test.append(np.cov(err_test[i, :, :], rowvar=False, aweights=mask_test[i, :]))
     pred_test_temp = pred_test[i, :, 2:].astype('float64')
@@ -154,7 +96,7 @@ ax = plt.subplot(111, aspect='equal')
 for i, index in enumerate(indices2):
     lambda_, v = np.linalg.eig(std_err_test[i, :, :])
     lambda_ = np.sqrt(lambda_)
-    ell_true = Ellipse(xy=(ADE[index, 1], ADE[index, 0]),
+    ell_true = Ellipse(xy=(FDE_xy[index, x_axis], FDE_xy[index, y_axis]),
                   width=lambda_[1]/scale_std, height=lambda_[0]/scale_std,
                   angle=np.rad2deg(np.arccos(v[0, 0])))
     ell_true.set_facecolor('none')
@@ -163,19 +105,19 @@ for i, index in enumerate(indices2):
 for i, index in enumerate(indices2):
     lambda_, v = np.linalg.eig(std_err_pred_mean[i, :, :])
     lambda_ = np.sqrt(lambda_)
-    ell_pred = Ellipse(xy=(ADE[index, 1], ADE[index, 0]),
+    ell_pred = Ellipse(xy=(FDE_xy[index, x_axis], FDE_xy[index, y_axis]),
                   width=lambda_[1]/scale_std, height=lambda_[0]/scale_std,
                   angle=np.rad2deg(np.arccos(v[0, 0])))
     ell_pred.set_facecolor('none')
     ell_pred.set_edgecolor('red')
     ax.add_artist(ell_pred)
-rmse_line = plt.plot(ADE[:, 1], ADE[:, 0], color='blue', label='RMSE_xy(t)')
+rmse_line = plt.plot(FDE_xy[:, x_axis], FDE_xy[:, y_axis], color='blue', label='RMSE_xy(t)')
 plt.xlabel('x (m)')
 plt.ylabel('y (m)')
 plt.title('Evolution of the xy RMSE with global covariances at')
 plt.legend([Line2D([0], [0], color='b', label='RMSE_xy(t)'),
             ell_true, ell_pred],
-           ['MAE_xy(t)', 'Global error covariance', 'Mean predicted error covariance'],
+           ['FDE_xy(t)', 'Global error covariance', 'Mean predicted error covariance'],
            handler_map={Ellipse: HandlerEllipse()})
 plt.xlim(-0.1, 8.5)
 plt.ylim(-0.1, 1.)
@@ -186,19 +128,19 @@ plt.hist(dist_error[indices[1:], :].transpose(), bins=20, label=[str(int(i/4)) f
 plt.legend()
 plt.show()
 
-args = np.argwhere(dist_error[24, :] > 1000)
 argmax = np.argmax(dist_error[24, :])
 plt.figure(3)
-plt.plot(hist_test[:, argmax, 1], hist_test[:, argmax, 0], '-+', color='blue', label='History')
-plt.plot(pred_test[:, argmax, 1], pred_test[:, argmax, 0], '-o', color='red', label='Prediction')
-plt.plot(fut_test[:, argmax, 1], fut_test[:, argmax, 0], '-+', color='green', label='Future')
+plt.plot(pred_test[:, argmax, x_axis], pred_test[:, argmax, y_axis], '-o', color='red', label='Prediction')
+plt.plot(hist_test[:, argmax, x_axis], hist_test[:, argmax, y_axis], '-+', color='blue', label='History')
+plt.plot(fut_test[:, argmax, x_axis], fut_test[:, argmax, y_axis], '-+', color='green', label='Future')
 plt.xlabel('x position (m)')
 plt.ylabel('y position (m)')
 plt.title('Trajectory with observed history, future observations, and predicted future observations')
 plt.legend()
 plt.axis('equal')
 plt.show()
-#
+
+# args = np.argwhere(dist_error[24, :] > 10000)
 # for i in args:
 #     plt.figure()
 #     plt.plot(hist_test[:, i, 1], hist_test[:, i, 0], '-+', color='blue', label='History')
@@ -209,5 +151,7 @@ plt.show()
 #     plt.title('Trajectory with observed history, future observations, and predicted future observations')
 #     plt.legend()
 #     plt.axis('equal')
-#     plt.savefig('Outliers/outlier'+str(i).zfill(2))
+#     plt.savefig('Outliers\\outlier'+str(i).zfill(2))
 #     plt.close()
+
+

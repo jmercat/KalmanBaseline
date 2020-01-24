@@ -2,9 +2,6 @@ from __future__ import print_function
 import torch
 from torch.utils.data import DataLoader
 
-from kalman_prediction import KalmanLSTM, KalmanCV
-from loadNGSIM import NGSIMDataset
-
 import matplotlib
 import numpy as np
 import matplotlib.cm as cm
@@ -12,6 +9,11 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.widgets import Button
 
+from utils import get_test_set, get_net, Settings
+
+args = Settings()
+eps = args.std_threshold
+eps_rho = args.corr_threshold
 
 def bivariate_normal(X, Y, sigmax=1.0, sigmay=1.0,
                      mux=0.0, muy=0.0, sigmaxy=0.0):
@@ -21,18 +23,17 @@ def bivariate_normal(X, Y, sigmax=1.0, sigmay=1.0,
     <http://mathworld.wolfram.com/BivariateNormalDistribution.html>`_
     at mathworld.
     """
-    eps = 1e-3
     sigmax = np.maximum(sigmax, eps)
     sigmay = np.maximum(sigmay, eps)
 
     Xmu = X - mux
     Ymu = Y - muy
 
-    rho = sigmaxy / sigmax * sigmay
+    rho = np.clip(sigmaxy / sigmax * sigmay, eps_rho-1, 1-eps_rho)
 
     z = Xmu ** 2 / sigmax ** 2 + Ymu ** 2 / sigmay ** 2 - 2 * rho * Xmu * Ymu / (sigmax * sigmay)
     denom = 2 * np.pi * sigmax * sigmay * np.sqrt(1 - rho ** 2)
-    return np.exp(-z / np.maximum(2 * (1 - rho ** 2), eps)) / denom
+    return np.exp(-z / 2 * (1 - rho ** 2)) / denom
 
 
 class DiscreteSlider(Slider):
@@ -65,53 +66,32 @@ class DiscreteSlider(Slider):
     def update_val_external(self, val, max_val):
         self.set_val(val, max_val)
 
-## Network Arguments
+net = get_net()
 
-load_file_name = 'Kalman_nll'
-dt = 0.2
-feet_to_meters = 0.3048
-use_LSTM = False
-
-# Initialize network
-if use_LSTM:
-    net = KalmanLSTM(dt)
-else:
-    net = KalmanCV(dt)
-
-if torch.cuda.is_available():
-    net = net.cuda()
-    if load_file_name != '':
-        net.load_state_dict(torch.load('./trained_models/' + load_file_name + '.tar'))
-else:
-    if load_file_name != '':
-        net.load_state_dict(torch.load('./trained_models/' + load_file_name + '.tar', map_location='cpu'))
-
-if torch.cuda.is_available():
-    net = net.cuda()
-
-data_set = NGSIMDataset('data/TestSet_traj_v2.mat',
-                        'data/TestSet_tracks_v2.mat')
+data_set = get_test_set()
 
 tsDataloader = DataLoader(data_set, batch_size=len(data_set), shuffle=True,
                           num_workers=8, collate_fn=data_set.collate_fn)
 
-skip = 10
+len_pred = int(args.time_pred/args.dt)
+lossVals = torch.zeros(len_pred).to(args.device)
+counts = torch.zeros(len_pred).to(args.device)
 
-if torch.cuda.is_available():
-    lossVals = torch.zeros(25).cuda()
-    counts = torch.zeros(25).cuda()
-else:
-    lossVals = torch.zeros(25)
-    counts = torch.zeros(25)
 
-delta = 1.0
-x_min = -200
-x_max = 300
-y_min = -25
-y_max = 25
+delta = 0.3
+x_min = -100
+x_max = 100
+y_min = -15
+y_max = 15
 scale = 0.4
 v_w = 5
 v_l = 15
+# if args.dataset == 'NGSIM':
+#     x_axis = 1
+#     y_axis = 0
+# else:
+x_axis = 0
+y_axis = 1
 
 
 class VisualizationPlot(object):
@@ -185,16 +165,15 @@ class VisualizationPlot(object):
         self.current_frame += 1
 
         # Initialize Variables
-        if torch.cuda.is_available():
-            hist = hist.cuda()
-            fut = fut.cuda()
+        hist = hist.to(args.device) * args.unit_conversion
+        fut = fut.to(args.device) * args.unit_conversion
 
         # Forward pass
-        fut_pred = net(hist*feet_to_meters, fut.shape[0])
-        fut_pred[:, :, :2] = fut_pred[:, :, :2]/feet_to_meters
+        fut_pred = net(hist, fut.shape[0])
 
         hist = hist.detach()
         fut = fut.detach()
+
         fut_pred = fut_pred.detach()
 
         Z = None
@@ -206,13 +185,13 @@ class VisualizationPlot(object):
         X, Y = np.meshgrid(x, y)
         fut_pred_ = fut_pred[:, 0, :].cpu().detach().numpy()
         for i in range(fut_pred_.shape[0]):  # time
-            muX = fut_pred_[i, 0]
-            muY = fut_pred_[i, 1]
-            sigX = fut_pred_[i, 2]
-            sigY = fut_pred_[i, 3]
+            muX = fut_pred_[i, x_axis]
+            muY = fut_pred_[i, y_axis]
+            sigX = fut_pred_[i, 2 + x_axis]
+            sigY = fut_pred_[i, 2 + y_axis]
             rho = fut_pred_[i, 4]
 
-            Z1 = bivariate_normal(X, Y, sigY, sigX, muY, muX, rho * sigX * sigY)
+            Z1 = bivariate_normal(X, Y, sigX, sigY, muX, muY, rho * sigX * sigY)
 
             factor = (Z1.max() - Z1.min())
             if factor < 0.00001:
@@ -224,7 +203,7 @@ class VisualizationPlot(object):
             else:
                 Z = Z + Z1
 
-            t = self.ax.plot(fut_pred_[:, 1], fut_pred_[:, 0], 'rx-', color='red')
+            t = self.ax.plot(fut_pred_[:, x_axis], fut_pred_[:, y_axis], 'rx-', color='red')
 
             plotted_objects.append(t)
 
@@ -236,14 +215,14 @@ class VisualizationPlot(object):
                                extent=(x_min, x_max, y_min - 1, y_max - 1))
             plotted_objects.append(m)
 
-        hist_x = hist[:, k, 0].cpu().numpy()
-        hist_y = hist[:, k, 1].cpu().numpy()
-        t = self.ax.plot(hist_y, hist_x, 'w|-', color='orange')
+        hist_x = hist[:, k, x_axis].cpu().numpy()
+        hist_y = hist[:, k, y_axis].cpu().numpy()
+        t = self.ax.plot(hist_x, hist_y, 'w|-', color='orange')
         plotted_objects.append(t)
 
-        fur_x = fut[:, k, 0].cpu().numpy()
-        fur_y = fut[:, k, 1].cpu().numpy()
-        t = self.ax.plot(fur_y, fur_x, 'w|-', color='green')
+        fut_x = fut[:, k, x_axis].cpu().numpy()
+        fut_y = fut[:, k, y_axis].cpu().numpy()
+        t = self.ax.plot(fut_x, fut_y, 'w|-', color='green')
         plotted_objects.append(t)
 
         self.plotted_objects = plotted_objects
@@ -318,3 +297,4 @@ class VisualizationPlot(object):
 
 visualization_plot = VisualizationPlot(data_set)
 visualization_plot.show()
+

@@ -1,0 +1,20 @@
+
+training_id   : 0 # Identifier for the output files from this training
+model_type    : 'bicycle' # bicycle, LSTM, CV
+dataset       : 'NGSIM' # 'Argoverse', 'NGSIM', 'Fusion'
+num_workers   : 8 # how many subprocesses to use for data loading. ``0`` means that the data will be loaded in the main process.
+load_name     : '' # Name of the weights file to load, '' for random intitialization
+use_nll_loss  : True # Set to True to train with NLL loss False to train with MSE loss
+std_threshold : 0.1 # 10cm standard deviation threshold
+corr_threshold: 0.01 # x y correlation threshold
+n_epochs      : 100
+batch_size    : 2048
+lr            : 0.01 # Learning rate
+optimizer     : Ranger # Adam, Ranger, SGD
+print_every_n : 2 # Print the loss and metrics in the terminal every n batch
+device        : '' # 'cpu', 'cuda', '' put '' for default (cuda if available cpu else)
+
+argoverse_data_directory : '../Argoverse/'
+NGSIM_data_directory : './data/train'
+NGSIM_test_data_directory : './data/test'
+fusion_data_directory : '../data_fusion/'
