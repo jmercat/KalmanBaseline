@@ -67,6 +67,7 @@ class DiscreteSlider(Slider):
         self.set_val(val, max_val)
 
 net = get_net()
+net.eval()
 
 data_set = get_test_set()
 
@@ -212,7 +213,7 @@ class VisualizationPlot(object):
             self.ax.add_patch(patch)  # main vehicle
             plotted_objects.append(patch)
             m = self.ax.imshow(Z, interpolation='bilinear', origin='lower', cmap=cm.inferno,
-                               extent=(x_min, x_max, y_min - 1, y_max - 1))
+                               extent=(x_min, x_max, y_min, y_max))
             plotted_objects.append(m)
 
         hist_x = hist[:, k, x_axis].cpu().numpy()

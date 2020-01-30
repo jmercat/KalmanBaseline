@@ -1,14 +1,12 @@
 import torch
 import torch.nn as nn
 
-
 class KalmanLSTM(nn.Module):
 
-    def __init__(self, dt):
+    def __init__(self, args):
         super(KalmanLSTM, self).__init__()
-
-        self.dt = dt
-        self.n_var = 6
+        KalmanBasis.__init__(self, 6, 2, args)
+        self.dt = args.dt
         self.n_command = 2
         self.feature_size = 128
         self.n_layers = 1
@@ -24,7 +22,7 @@ class KalmanLSTM(nn.Module):
         jerk_std[0, 1] *= 20
         self.jerk_std = nn.Parameter(jerk_std)
 
-        coef_G = torch.randn(self.n_var, self.n_var)
+        coef_G = torch.randn(self._state_size, self._state_size)
         # coef_G = torch.zeros(self.n_var, 1)
         # coef_G[0, 0] = 0.7427
         # coef_G[1, 0] = 2.3545
@@ -38,14 +36,14 @@ class KalmanLSTM(nn.Module):
         self.GR_ = torch.randn(2, 2)
         self.GR_ = nn.Parameter(self.GR_)
 
-        self.H = nn.Parameter(torch.zeros(2, self.n_var, requires_grad=False), requires_grad=False) # observations are x, y
-        self.H_t = nn.Parameter(torch.zeros(self.n_var, 2, requires_grad=False), requires_grad=False)  # observations are x, y
-        self.B = nn.Parameter(torch.zeros(self.n_var, 2, requires_grad=False), requires_grad=False) # actions are accelerations
-        self.F = nn.Parameter(torch.eye(self.n_var, requires_grad=False), requires_grad=False)
-        self.G_ = nn.Parameter(torch.zeros(self.n_var, 2, requires_grad=False), requires_grad=False)
-        self.Id = nn.Parameter(torch.eye(self.n_var, requires_grad=False), requires_grad=False)
+        self.H = nn.Parameter(torch.zeros(2, self._state_size, requires_grad=False), requires_grad=False) # observations are x, y
+        self.H_t = nn.Parameter(torch.zeros(self._state_size, 2, requires_grad=False), requires_grad=False)  # observations are x, y
+        self.B = nn.Parameter(torch.zeros(self._state_size, 2, requires_grad=False), requires_grad=False) # actions are accelerations
+        self.F = nn.Parameter(torch.eye(self._state_size, requires_grad=False), requires_grad=False)
+        self.G_ = nn.Parameter(torch.zeros(self._state_size, 2, requires_grad=False), requires_grad=False)
+        self.Id = nn.Parameter(torch.eye(self._state_size, requires_grad=False), requires_grad=False)
 
-
+        dt = args.dt
         # Process noise
         self.G_[0, 0] = dt * dt * dt / 6
         self.G_[1, 0] = dt * dt / 2
@@ -76,12 +74,15 @@ class KalmanLSTM(nn.Module):
         self.B[4, 1] = dt * dt / 2
         self.B[5, 1] = dt
 
-        self.command_feature = nn.Linear(self.n_var, self.feature_size)
+        self.command_feature = nn.Linear(self._state_size, self.feature_size)
         LSTMcells = []
+        layer_norms = []
         for i in range(self.n_layers):
             LSTMcells.append(nn.LSTMCell(self.feature_size,
                                          self.feature_size))
+            layer_norms.append(nn.LayerNorm(self.feature_size))
         self.LSTMcells = nn.ModuleList(LSTMcells)
+        self.layer_norms = nn.ModuleList(layer_norms)
 
         self.command_out = nn.Linear(self.feature_size, self.n_command * (1 + self.n_command))
 
@@ -94,9 +95,9 @@ class KalmanLSTM(nn.Module):
     def _get_command(self, X, state):
         hx_list, cx_list = state
         command = torch.tanh(self.command_feature(X.squeeze(2)))
-        for j, cell in enumerate(self.LSTMcells):
+        for j, (cell, l_n) in enumerate(zip(self.LSTMcells, self.layer_norms)):
             hx_list[j], cx_list[j] = cell(command, (hx_list[j], cx_list[j]))
-            command = hx_list[j]
+            command = l_n(hx_list[j])
         command = self.command_out(command)
         return command, (hx_list, cx_list)
 
@@ -107,7 +108,7 @@ class KalmanLSTM(nn.Module):
         X, P = self._kalman_init(Z[0], V0)
         for i in range(1, len(Z)):
             command, state = self._get_command(X, state)
-            X, P = self._kalman_pred(X, P, command)
+            X, P = self._kalman_pred(X, P) # The command is not used for state estimation, only prediction
             y, S = self._kalman_innovation(X, Z[i], P)
             X, P = self._kalman_update(X, P, S, y)
         return X, P, state
@@ -181,7 +182,7 @@ class KalmanLSTM(nn.Module):
 
         device = self.B.device
 
-        P = torch.zeros(Z.shape[0], self.n_var, self.n_var).to(device)
+        P = torch.zeros(Z.shape[0], self._state_size, self._state_size).to(device)
 
         P[:, 0, 0] = self.position_std_x * self.position_std_x
         P[:, 1, 1] = self.velocity_std_x * self.velocity_std_x

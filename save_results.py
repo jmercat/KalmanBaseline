@@ -14,7 +14,7 @@ if __name__ == '__main__':
     testSet = get_test_set()
 
     testDataloader = DataLoader(testSet, batch_size=args.batch_size,
-                                shuffle=True, num_workers=args.num_workers, collate_fn=testSet.collate_fn)
+                                shuffle=False, num_workers=args.num_workers, collate_fn=testSet.collate_fn)
 
     net.train_flag = False
     it_testDataloader = iter(testDataloader)
@@ -29,7 +29,7 @@ if __name__ == '__main__':
         hist, fut = next(it_testDataloader)
 
         hist = hist.to(args.device)
-        fut = fut.to(fut.device)
+        fut = fut.to(args.device)
 
         mask = torch.cumprod(1 - (fut[:, :, 0] == 0).float() * (fut[:, :, 1] == 0).float(), dim=0)
         hist *= args.unit_conversion
@@ -37,12 +37,13 @@ if __name__ == '__main__':
 
         fut_pred = net(hist, fut.shape[0])[-fut.shape[0]:]
 
+        loss = maskedNLL(fut_pred, fut, mask, 2)
+
         hist_test.append(hist.cpu().data.numpy())
         fut_test.append(fut.cpu().data.numpy())
         mask_test.append(mask.cpu().data.numpy())
         pred_test.append(fut_pred.cpu().data.numpy())
 
-        loss = maskedNLL(fut_pred, fut, mask, 2)
         avg_loss += loss.detach()
     avg_loss = avg_loss.cpu().data.numpy()
 

@@ -32,30 +32,20 @@ OBJ_VY = 7
 OBJ_CLASS = 8
 OBJ_DATA_LEN = 9
 
-## After object information, the numbner of lines n_line is written then n_lines times this info is available
-LINE_ID = 0
-LINE_X = 1
-LINE_Y = 2
-LINE_THETA = 3
-LINE_C = 4
-LINE_DC = 5
-LINE_LENGTH = 6
-LINE_DATA_LEN = 7
-
 class FusionDataset(Dataset):
-    def __init__(self, dataset_path, random_rotation=False, random_translation=False, use_yaw=False):
+    def __init__(self, dataset_path, args):
         super(FusionDataset, self).__init__()
         self.load_dataset(dataset_path)
-        self.random_rotation = random_rotation
-        self.random_translation = random_translation
+        self.random_rotation = args.random_rotation
+        self.random_translation = args.random_translation
         self.translation_distance_std = 2
-        self.use_yaw = use_yaw
-        if use_yaw:
+        self.use_yaw = args.use_yaw
+        if args.use_yaw:
             self.data_to_get = [OBJ_X, OBJ_Y, OBJ_YAW]
         else:
             self.data_to_get = [OBJ_X, OBJ_Y]
-        self.hist_len = int(1000*2/40)
-        self.fut_len = int(1000*3/40)
+        self.hist_len = int(args.time_hist/args.dt)
+        self.fut_len = int(args.time_pred/args.dt)
         self.time_len = self.hist_len + self.fut_len
         self.min_num_obs = 10
         self.down_sampling = 1
@@ -96,14 +86,14 @@ class FusionDataset(Dataset):
     def collate_fn(self, samples):
         traj = samples[0]
         time_len = traj.shape[0]
-        assert time_len == self.time_len
+        assert time_len >= self.time_len
         time_len = self.time_len // self.down_sampling
         hist_len = self.hist_len // self.down_sampling
-        data_batch = np.zeros([time_len, len(samples), len(self.data_to_get)])
+        data_batch = np.zeros([self.time_len, len(samples), len(self.data_to_get)])
 
         for i, traj in enumerate(samples):
-            data_batch[:, i, :] = traj[:self.down_sampling*time_len:self.down_sampling, :]
+            data_batch[:, i, :] = traj[:self.down_sampling*self.time_len:self.down_sampling, :]
 
         data_batch = torch.from_numpy(data_batch.astype('float32'))
 
-        return data_batch[:hist_len], data_batch[hist_len:]
+        return data_batch[:hist_len], data_batch[hist_len:self.time_len]

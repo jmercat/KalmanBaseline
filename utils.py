@@ -4,7 +4,9 @@ import yaml
 
 from bicycle_predictor import Bicycle_model
 from LSTM_CV_predictor import KalmanLSTM
+from LSTM_kalman import CV_LSTM_model, CA_LSTM_model, Bicycle_LSTM_model
 from constant_velocity_predictor import CV_model
+from constant_acceleration_predictor import CA_model
 from loadNGSIM import NGSIMDataset
 from loadArgoverse import ArgoverseDataset
 from loadFusion import FusionDataset
@@ -18,25 +20,26 @@ class Settings:
                 if torch.cuda.is_available():
                     self.settings_dict['device'] = 'cuda'
                     print('Using device ' + torch.cuda.get_device_name())
-            self.settings_dict['use_yaw'] = self.settings_dict['model_type'] == 'bicycle'
+            self.settings_dict['use_yaw'] = self.settings_dict['model_type'] == 'Bicycle' or\
+                                            self.settings_dict['model_type'] == 'Bicycle_LSTM'
             self.settings_dict['name'] = (self.settings_dict['model_type'] + '_' +
                                           self.settings_dict['dataset'] + '_' +
                                           str(self.settings_dict['training_id']))
             if self.settings_dict['dataset'] == 'NGSIM':
-                self.settings_dict['dt'] = 0.2
+                self.settings_dict['dt'] = 0.1
                 self.settings_dict['unit_conversion'] = 0.3048
                 self.settings_dict['time_hist'] = 3
-                self.settings_dict['time_pred'] = 5
+                self.settings_dict['time_pred'] = min(5, self.settings_dict['time_pred'])
             elif self.settings_dict['dataset'] == 'Argoverse':
                 self.settings_dict['dt'] = 0.1
                 self.settings_dict['unit_conversion'] = 1
                 self.settings_dict['time_hist'] = 2
-                self.settings_dict['time_pred'] = 3
+                self.settings_dict['time_pred'] = min(3, self.settings_dict['time_pred'])
             elif self.settings_dict['dataset'] == 'Fusion':
                 self.settings_dict['dt'] = 0.04
                 self.settings_dict['unit_conversion'] = 1
                 self.settings_dict['time_hist'] = 2
-                self.settings_dict['time_pred'] = 3
+                self.settings_dict['time_pred'] = min(3, self.settings_dict['time_pred'])
             else:
                 raise ValueError('The dataset "' + self.settings_dict['dataset'] + '" is unknown. Please correct the'
                                  'dataset name in "settings.yaml" or modify the Settings class in "utils.py" to handle it.')
@@ -60,15 +63,15 @@ def get_dataset():
     args = Settings()
     if args.dataset == 'NGSIM':
         trSet = NGSIMDataset( args.NGSIM_data_directory + 'TrainSet_traj_v2.mat',
-                              args.NGSIM_data_directory + 'TrainSet_tracks_v2.mat', use_yaw=args.use_yaw)
+                              args.NGSIM_data_directory + 'TrainSet_tracks_v2.mat', args=args)
         valSet = NGSIMDataset(args.NGSIM_data_directory + 'ValSet_traj_v2.mat',
-                              args.NGSIM_data_directory + 'ValSet_tracks_v2.mat', use_yaw=args.use_yaw)
+                              args.NGSIM_data_directory + 'ValSet_tracks_v2.mat', args=args)
     elif args.dataset == 'Argoverse':
-        trSet = ArgoverseDataset(args.argoverse_data_directory + 'train/data', use_yaw=args.use_yaw)
-        valSet = ArgoverseDataset(args.argoverse_data_directory + 'val/data', use_yaw=args.use_yaw)
+        trSet = ArgoverseDataset(args.argoverse_data_directory + 'train/data', args=args)
+        valSet = ArgoverseDataset(args.argoverse_data_directory + 'val/data', args=args)
     elif args.dataset == 'Fusion':
-        trSet = FusionDataset(args.fusion_data_directory + 'sequenced_data.tar', use_yaw=args.use_yaw)
-        valSet = FusionDataset(args.fusion_data_directory + 'sequenced_data.tar', use_yaw=args.use_yaw)
+        trSet = FusionDataset(args.fusion_data_directory + 'train_sequenced_data.tar', args=args)
+        valSet = FusionDataset(args.fusion_data_directory + 'val_sequenced_data.tar', args=args)
 
     return trSet, valSet
 
@@ -77,11 +80,11 @@ def get_test_set():
     args = Settings()
     if args.dataset == 'NGSIM':
         testSet = NGSIMDataset(args.NGSIM_test_data_directory + 'TestSet_traj_v2.mat',
-                             args.NGSIM_test_data_directory + 'TestSet_tracks_v2.mat', use_yaw=args.use_yaw)
+                             args.NGSIM_test_data_directory + 'TestSet_tracks_v2.mat', args)
     elif args.dataset == 'Argoverse':
-        testSet = ArgoverseDataset(args.argoverse_data_directory + 'val/data', use_yaw=args.use_yaw)
+        testSet = ArgoverseDataset(args.argoverse_data_directory + 'val/data', args)
     elif args.dataset == 'Fusion':
-        testSet = FusionDataset(args.fusion_data_directory + 'sequenced_data.tar', use_yaw=args.use_yaw)
+        testSet = FusionDataset(args.fusion_data_directory + 'test_sequenced_data.tar', args)
 
     return testSet
 
@@ -89,18 +92,31 @@ def get_test_set():
 def get_net():
     args = Settings()
     if args.model_type == 'LSTM':
-        net = KalmanLSTM(args.dt)
+        net = KalmanLSTM(args)
     elif args.model_type == 'CV':
-        net = CV_model(args.dt)
-    elif args.model_type == 'bicycle':
-        net = Bicycle_model(args.dt)
+        net = CV_model(args)
+    elif args.model_type == 'Bicycle':
+        net = Bicycle_model(args)
+    elif args.model_type == 'CA':
+        net = CA_model(args)
+    elif args.model_type == 'CV_LSTM':
+        net = CV_LSTM_model(args)
+    elif args.model_type == 'CA_LSTM':
+        net = CA_LSTM_model(args)
+    elif args.model_type == 'Bicycle_LSTM':
+        net = Bicycle_LSTM_model(args)
     else:
         print('Model type ' + args.model_type + ' is not known.')
 
     net = net.to(args.device)
 
     if args.load_name != '':
-        net.load_state_dict(torch.load('./trained_models/' + args.load_name + '.tar', map_location=args.device))
+        try:
+            net.load_state_dict(torch.load('./trained_models/' + args.load_name + '.tar', map_location=args.device))
+        except RuntimeError as err:
+            print(err)
+            print('Loading what can be loaded with strict=False option.')
+            net.load_state_dict(torch.load('./trained_models/' + args.load_name + '.tar', map_location=args.device), strict=False)
     return net
 
 ## Custom activation for output layer (Graves, 2015)

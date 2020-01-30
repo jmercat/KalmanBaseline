@@ -8,25 +8,21 @@ import h5py
 
 class NGSIMDataset(Dataset):
 
-    def __init__(self, mat_traj_file, mat_tracks_file, t_h=30, t_f=50, d_s=2,
-                 use_yaw=False, random_rotation=False, normalize_angle=True):
+    def __init__(self, mat_traj_file, mat_tracks_file, args):
         """
         :param mat_traj_file: name of trajectory file generated from the matlab preprocessing
         :param mat_tracks_file: name of track file generated from the matlab preprocessing
-        :param t_h:
-        :param t_f:
-        :param d_s:
-        :param use_yaw:
         """
         self.D = np.array(h5py.File(mat_traj_file)['traj']).transpose()
         self.T = scp.loadmat(mat_tracks_file)['tracks']
-        self.t_h = t_h  # length of track history
-        self.t_f = t_f  # length of predicted trajectory
-        self.d_s = d_s  # down sampling rate of all sequences
-        self.use_yaw = use_yaw
-        self.feature_size = 2 + int(use_yaw)
-        self.random_rotation = random_rotation
-        self.normalize_angle = normalize_angle
+        self.use_yaw = args.use_yaw
+        self.hist_len = int(args.time_hist / args.dt)
+        self.fut_len = int(args.time_pred / args.dt)
+        self.time_len = self.hist_len + self.fut_len
+        self.down_sampling = 1  # down sampling rate of all sequences
+        self.feature_size = 2 + int(args.use_yaw)
+        self.random_rotation = args.random_rotation
+        self.normalize_angle = args.normalize_angle
 
     def __len__(self):
         return len(self.D)
@@ -93,11 +89,11 @@ class NGSIMDataset(Dataset):
             if vehTrack.size == 0 or np.argwhere(vehTrack[:, 0] == t).size == 0:
                 return np.empty([0, 2])
             else:
-                stpt = np.maximum(0, np.argwhere(vehTrack[:, 0] == t).item() - self.t_h)
+                stpt = np.maximum(0, np.argwhere(vehTrack[:, 0] == t).item() - self.hist_len)
                 enpt = np.argwhere(vehTrack[:, 0] == t).item() + 1
-                hist = vehTrack[stpt:enpt:self.d_s, 1:3] - refPos
+                hist = vehTrack[stpt:enpt:self.down_sampling, 1:3] - refPos
 
-            if len(hist) < self.t_h // self.d_s + 1:
+            if len(hist) < self.hist_len // self.down_sampling + 1:
                 return np.empty([0, 2])
             return hist
 
@@ -105,18 +101,18 @@ class NGSIMDataset(Dataset):
     def getFuture(self, vehId, t, dsId):
         vehTrack = self.T[dsId - 1][vehId - 1].transpose()
         refPos = vehTrack[np.where(vehTrack[:, 0] == t)][0, 1:3]
-        stpt = np.argwhere(vehTrack[:, 0] == t).item() + self.d_s
-        enpt = np.minimum(len(vehTrack), np.argwhere(vehTrack[:, 0] == t).item() + self.t_f + 1)
-        fut = vehTrack[stpt:enpt:self.d_s, 1:3] - refPos
+        stpt = np.argwhere(vehTrack[:, 0] == t).item() + self.down_sampling
+        enpt = np.minimum(len(vehTrack), np.argwhere(vehTrack[:, 0] == t).item() + self.fut_len + 1)
+        fut = vehTrack[stpt:enpt:self.down_sampling, 1:3] - refPos
         return fut
 
     ## Collate function for dataloader
     def collate_fn(self, samples):
 
-        maxlen = self.t_h // self.d_s + 1
+        maxlen = self.hist_len // self.down_sampling + 1
 
         # Initialize history, future
-        time_size = self.t_f // self.d_s
+        time_size = self.fut_len // self.down_sampling
         hist_batch = torch.zeros(maxlen, len(samples), self.feature_size)
         fut_batch = torch.zeros(time_size, len(samples), 2)
 

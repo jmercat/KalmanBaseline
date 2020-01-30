@@ -10,11 +10,11 @@ class Bicycle_model(KalmanBasis):
     This class implements kalman_basis for the bicycle model with a state [x, y, theta, v, a, w]
     which are position, yaw (heading angle), velocity, acceleration, wheel_angle
     """
-    def __init__(self, dt,
-                 velocity_std=10, yaw_std=15, pos_std=1,
-                 jerk=5, wheel_jerk=3, a_std=1, wheel_std=3):
+    def __init__(self, args,
+                 velocity_std=10, yaw_std=2, pos_std=0.3,
+                 jerk=3, wheel_jerk=1, a_std=0.2, wheel_std=5):
         # type: (float, float, float, float, float, float, float, float) -> None
-        KalmanBasis.__init__(self, 6, 3, dt)
+        KalmanBasis.__init__(self, 6, 3, args)
 
         self._vehicle_length = nn.Parameter(torch.ones(1) * 2.6, requires_grad=False)
         self._velocity_std = nn.Parameter(torch.ones(1) * velocity_std, requires_grad=True)
@@ -25,11 +25,19 @@ class Bicycle_model(KalmanBasis):
         self._wheel_jerk = nn.Parameter(torch.ones(1) * wheel_jerk * np.pi / 180, requires_grad=True)
         self._wheel_std = nn.Parameter(torch.ones(1) * wheel_std * np.pi / 180, requires_grad=True)
 
-        coef_G = torch.randn(self._state_size, self._state_size)*0.1 + torch.eye(self._state_size)
-        self._coef_G = nn.Parameter(coef_G, requires_grad=True)
+        # coef_G = torch.randn(self._state_size, self._state_size)*0.1 + torch.eye(self._state_size)
+        # self._coef_G = nn.Parameter(coef_G, requires_grad=True)
 
         _GR = torch.randn((3, 3))*0.001
         self._GR = nn.Parameter(_GR)
+
+        self._Q_layer = nn.Linear(self._state_size + 4, self._state_size, bias=False)
+        self._n_command = 2
+
+        # self._Q_layer.weight.data = self._Q_layer.weight * self._Q_layer.weight
+
+    def get_l1(self):
+        return torch.sum(torch.abs(self._Q_layer.weight))
 
     def _init_static(self, batch_size):
         self._Q = self._init_Q(batch_size)
@@ -71,7 +79,22 @@ class Bicycle_model(KalmanBasis):
 
         return J
 
-    def _get_Q(self, X):
+    def _get_Q(self, X, Q_corr):
+        angle = X[:, 2:3, 0].clone()
+        cos = torch.cos(angle).clone()
+        sin = torch.sin(angle).clone()
+        wheel_angle = X[:, 5:6, 0].clone()
+        tan_w = torch.tan(wheel_angle)
+        curvature = tan_w / self._vehicle_length
+        in_q = torch.cat((X.squeeze(-1), cos, sin, (1 + tan_w*tan_w), curvature), dim=-1)
+        G = self._Q_layer(in_q)
+        Q = self._Q.clone()
+        if Q_corr is not None:
+            Q = Q * (Q_corr + 1)
+        Q *= G.unsqueeze(2) @ G.unsqueeze(1)
+        return Q
+
+    def _get_Q2(self, X, Q_corr):
         dt = self._dt
         angle = X[:, 2].clone()
         Q = torch.zeros((X.shape[0], self._state_size, self._state_size), device=X.device)
@@ -99,6 +122,8 @@ class Bicycle_model(KalmanBasis):
         for ei, i in enumerate(tyaw_rows):
             for ej, j in enumerate(tyaw_rows):
                 Q[:, i, j] = GGt[ei, ej].clone()
+        if Q_corr is not None:
+            Q *= Q_corr
         return Q
 
     def _get_R(self):
@@ -124,12 +149,12 @@ class Bicycle_model(KalmanBasis):
     def _init_Q(self, batch_size):
         device = self._H.device
         dt = self._dt
-        Rho = torch.matmul(self._coef_G, self._coef_G.transpose(1, 0))
+        # Rho = torch.matmul(self._coef_G, self._coef_G.transpose(1, 0))
         G = torch.zeros(self._state_size, requires_grad=False, device=device)
         G[0:2] = dt ** 3 / 6
         G[2:4] = dt ** 2 / 2
         G[4:6] = dt
-        Q = G.unsqueeze(1) @ G.unsqueeze(0) * Rho
+        Q = G.unsqueeze(1) @ G.unsqueeze(0)# * Rho
         return Q.unsqueeze(0).repeat(batch_size, 1, 1)
 
     def _init_P(self, batch_size):
@@ -142,3 +167,27 @@ class Bicycle_model(KalmanBasis):
         P[:, 4, 4] = self._a_std ** 2
         P[:, 5, 5] = self._wheel_std ** 2
         return P
+
+    def _apply_command(self, X, command):
+        u = command[:, :2]
+        X_corr = torch.zeros_like(X)
+        dt = self._dt
+        angle = X[:, 2, 0].clone()
+        wheel_angle = X[:, 5, 0].clone()
+        velocity = X[:, 3, 0].clone()
+        acc = X[:, 4, 0].clone()
+        tan_w = torch.tan(wheel_angle + dt / 2 * u[:, 1].clone())
+        curvature = tan_w / self._vehicle_length
+        yaw_rate = curvature * (velocity + acc * dt / 2)
+        yaw_rate_corr = curvature.clone() * (dt * dt / 4 * u[:, 0].clone())
+        velocity_05 = velocity.clone() + dt * acc / 2 + dt * dt / 4 * u[:, 0].clone()
+        sin_b = torch.sin(yaw_rate_corr.clone() * dt / 2)
+
+        X_corr[:, 0, 0] = -torch.sin(angle.clone() + yaw_rate.clone() * dt / 2) * sin_b.clone() * dt * velocity_05.clone()
+        X_corr[:, 1, 0] =  torch.cos(angle.clone() + yaw_rate.clone() * dt / 2) * sin_b.clone() * dt * velocity_05.clone()
+        X_corr[:, 2, 0] = yaw_rate_corr.clone() * dt
+        X_corr[:, 3, 0] = dt * dt / 2 * u[:, 0].clone()
+        X_corr[:, 4, 0] = dt * u[:, 0].clone()
+        X_corr[:, 5, 0] = dt * u[:, 1].clone()
+
+        return X_corr, command[:, 2:].view(-1, self._state_size, self._state_size)

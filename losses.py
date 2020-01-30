@@ -9,11 +9,23 @@ eps = args.std_threshold
 eps_rho = args.corr_threshold
 
 
-def logsumexp_np(inputs, keepdim=False):
-    s, _ = np.max(inputs, axis=3, keepdims=keepdim)
-    outputs = s + (inputs - s).exp().sum(axis=3, keepdims=keepdim).log()
-    return outputs
+# def logsumexp_np(inputs, keepdim=False):
+#     s, _ = np.max(inputs, axis=3, keepdims=keepdim)
+#     outputs = s + (inputs - s).exp().sum(axis=3, keepdims=keepdim).log()
+#     return outputs
 
+def logsumexp_np(inputs, mask, keepdim=False):
+    s = np.max(inputs, axis=2, keepdims=True)
+    if mask is None:
+        outputs = s + np.log(np.sum(np.exp(inputs - s), axis=2, keepdims=True))
+    else:
+        mask_veh = mask[:, :, None]
+        inputs_s = np.where(mask_veh == 0, -1e9, inputs - s)
+        outputs = s + np.log(np.maximum(np.sum(np.exp(inputs_s), axis=2, keepdims=True), 1e-9))
+
+    if not keepdim:
+        outputs = outputs.squeeze(-1)
+    return outputs
 
 def simpleNLL_np(y_pred, y_gt):
     y_pred_pos = y_pred[:, :, :2]
@@ -31,6 +43,35 @@ def simpleNLL_np(y_pred, y_gt):
          (2 * rho * diff_x * diff_y) / (sigX * sigY))
     nll = 0.5 * ohr * z + np.log(sigX * sigY) - 0.5*np.log(ohr) + np.log(np.pi*2)
     return nll
+
+def multiNLL_np(y_pred, y_gt, mask=None):
+    eps = 1e-1
+    eps_rho = 1e-2
+    # y_gt = np.tile(y_gt[:, :, None, :], (1, 1, y_pred.shape[2], 1))
+    sigX = np.maximum(y_pred[:, :, :, 2], eps)
+    sigY = np.maximum(y_pred[:, :, :, 3], eps)
+    rho = y_pred[:, :, :, 4]
+    rho = np.clip(rho, eps_rho-1, 1-eps_rho)
+
+    ohr = 1/(1 - rho * rho)
+    frac_x = (y_gt[:, :, None, 0] - y_pred[:, :, :, 0]) / sigX
+    frac_y = (y_gt[:, :, None, 1] - y_pred[:, :, :, 1]) / sigY
+    # norm_term = np.log(2*np.pi*sigX * sigY) - 0.5*np.log(ohr)
+    ll = -0.5 * ohr * (frac_x * frac_x + frac_y * frac_y
+                     - 2 * rho * frac_x * frac_y) - np.log(2*np.pi*sigX * sigY) - 0.5*np.log(ohr) + np.log(y_pred[:, :, :, 5])
+    # nll = z + norm_term
+    # mask = np.logical_and(mask, np.prod(nll > 0, 2))
+    # ll = - nll + np.log(p)
+    # ll = ll.squeeze(-1)
+    nll = -logsumexp_np(ll, mask)
+
+    if mask is None:
+        lossVal = np.mean(nll, 1)
+    else:
+        nll = np.where(mask == 0, 0, nll)
+        lossVal = np.sum(nll, 1) / np.sum(mask, 1)
+    return lossVal
+
 
 
 def simpleMSE_np(y_pred, y_gt, mask=None):

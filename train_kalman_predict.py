@@ -11,6 +11,14 @@ from timeit import default_timer as timer
 
 args = Settings()
 
+def lr_scheduler(optim, iter):
+    if iter < 10:
+        optim.param_groups[0]['lr'] = args.lr/10 *iter
+    elif iter > 30:
+        optim.param_groups[0]['lr'] = args.lr*(30/iter)
+    else:
+        optim.param_groups[0]['lr'] = args.lr
+
 logger = SummaryWriter('./logs/'+args.name)
 
 # logger.add_hparams(args.get_dict(), {})
@@ -24,13 +32,13 @@ if args.optimizer == 'Ranger':
 elif args.optimizer == 'Adam':
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
 else:
-    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, nesterov=True)
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr)
 
 trDataloader = DataLoader(trSet, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=trSet.collate_fn)
-valDataloader = DataLoader(valSet, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=valSet.collate_fn)
+valDataloader = DataLoader(valSet, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=valSet.collate_fn)
 
-# torch.autograd.set_detect_anomaly(True)
-
+torch.autograd.set_detect_anomaly(True)
+iter_num = 0
 for epoch_num in range(args.n_epochs):
 
     it_trDataloader = iter(trDataloader)
@@ -47,6 +55,7 @@ for epoch_num in range(args.n_epochs):
 
     for i in range(len_tr):
         # start_time = timer()
+        iter_num += 1
         data = next(it_trDataloader)
         hist = data[0].to(args.device) * args.unit_conversion
         fut = data[1].to(args.device) * args.unit_conversion
@@ -60,7 +69,7 @@ for epoch_num in range(args.n_epochs):
         # print('Time prediction: ', pred_time - data_time)
 
         mse_loss = maskedMSE(fut_pred, fut, mask, 2)
-        nll_loss = maskedNLL(fut_pred, fut, mask, 2)
+        nll_loss = maskedNLL(fut_pred, fut, mask, 2) #+ 1e-2*net.get_l1()
         if args.use_nll_loss:
             loss = nll_loss
         else:
@@ -70,7 +79,8 @@ for epoch_num in range(args.n_epochs):
             continue
             # raise RuntimeError("The loss value is Nan.")
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(net.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(net.parameters(), 1)
+        lr_scheduler(optimizer, iter_num)
         optimizer.step()
         # step_time = timer()
         # print('Time backward: ', step_time - pred_time)
@@ -86,7 +96,7 @@ for epoch_num in range(args.n_epochs):
             avg_nll_loss = avg_nll_loss.item()
 
             print("Epoch no:", epoch_num + 1, "| Epoch progress(%):",
-                  format(i / (len(trSet) / args.batch_size) * args.print_every_n, '0.2f'),
+                  format(i / (len(trSet) / args.batch_size) * 100, '0.2f'),
                   "| loss:", format(avg_loss / args.print_every_n, '0.4f'),
                   "| NLL:", format(avg_nll_loss / args.print_every_n, '0.4f'),
                   "| MSE:", format(avg_mse_loss / args.print_every_n, '0.4f'))

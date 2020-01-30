@@ -12,17 +12,18 @@ from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecas
 
 
 class ArgoverseDataset(Dataset):
-    def __init__(self, root_dir, len_hist=20, len_fut=30, use_yaw=False, random_rotation=False, normalize_angle=True):
+    def __init__(self, root_dir, args):
         self.AFL = ArgoverseForecastingLoader(root_dir)
-        self.len_hist = len_hist
-        self.len_fut = len_fut
-        self.use_yaw = use_yaw
+        self.use_yaw = args.use_yaw
+        self.hist_len = int(args.time_hist / args.dt)
+        self.fut_len = int(args.time_pred / args.dt)
+        self.time_len = self.hist_len + self.fut_len
         if self.use_yaw:
             self.feature_size = 3
         else:
             self.feature_size = 2
-        self.random_rotation = random_rotation
-        self.normalize_angle = normalize_angle
+        self.random_rotation = args.random_rotation
+        self.normalize_angle = args.normalize_angle
     def __len__(self):
         return len(self.AFL)
 
@@ -41,37 +42,38 @@ class ArgoverseDataset(Dataset):
     def __getitem__(self, idx):
         trajectory = self.AFL[idx]
         trajectory = trajectory.agent_traj
-        trajectory = trajectory - trajectory[self.len_hist-1]
-        if self.use_yaw:
-            traj_diff = trajectory[1:] - trajectory[:-1]
-            yaw = np.arctan2(traj_diff[:, 1:2], traj_diff[:, 0:1])
-            yaw = np.concatenate((yaw[0:1, :], yaw), axis=0)
-            trajectory = np.concatenate((trajectory, yaw), axis=1)
+        trajectory = trajectory - trajectory[self.hist_len - 1]
+
         if self.random_rotation:
             angle = np.random.uniform(0, 2 * np.pi)
             trajectory[:, :2] = self.scene_rotation(trajectory[:, :2], angle)
-            if self.use_yaw:
-                trajectory[:, 2] += angle
-                trajectory[:, 2] = (trajectory[:, 2] + np.pi) % (2*np.pi) - np.pi
+            # if self.use_yaw:
+            #     trajectory[:, 2] += angle
+            #     trajectory[:, 2] = (trajectory[:, 2] + np.pi) % (2*np.pi) - np.pi
         elif self.normalize_angle:
-            traj_diff = trajectory[self.len_hist-1] - trajectory[0]
+            traj_diff = trajectory[self.hist_len - 1] - trajectory[0]
             angle = -np.arctan2(traj_diff[1:2], traj_diff[0:1])
             trajectory[:, :2] = self.scene_rotation(trajectory[:, :2], angle)
-            if self.use_yaw:
-                trajectory[:, 2] += angle
-
+            # if self.use_yaw:
+            #     trajectory[:, 2] += angle
+        if self.use_yaw:
+            traj_diff = trajectory[1:] - trajectory[:-1]
+            yaw = np.arctan2(traj_diff[:, 1:2], traj_diff[:, 0:1])
+            yaw = (yaw[1:] + yaw[:-1])/2
+            yaw = np.concatenate((yaw[0:2, :], yaw), axis=0)
+            trajectory = np.concatenate((trajectory, yaw), axis=1)
         return trajectory
 
     ## Collate function for dataloader
     def collate_fn(self, samples):
         batch_size = len(samples)
         # Initialize history, future
-        hist_batch = np.zeros([self.len_hist, batch_size, self.feature_size])
-        fut_batch = np.zeros([self.len_fut, batch_size, self.feature_size])
+        hist_batch = np.zeros([self.hist_len, batch_size, self.feature_size])
+        fut_batch = np.zeros([self.fut_len, batch_size, self.feature_size])
 
         for sampleId, trajectory in enumerate(samples):
-            hist_batch[:, sampleId, :] = trajectory[:self.len_hist, :]
-            fut_batch[:, sampleId, :] = trajectory[self.len_hist:, :]
+            hist_batch[:, sampleId, :] = trajectory[:self.hist_len, :]
+            fut_batch[:, sampleId, :] = trajectory[self.hist_len:self.time_len, :]
 
         hist_batch = torch.from_numpy(hist_batch.astype('float32'))
         fut_batch = torch.from_numpy(fut_batch.astype('float32'))
