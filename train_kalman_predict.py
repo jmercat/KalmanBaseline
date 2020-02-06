@@ -37,7 +37,7 @@ else:
 trDataloader = DataLoader(trSet, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=trSet.collate_fn)
 valDataloader = DataLoader(valSet, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=valSet.collate_fn)
 
-torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 iter_num = 0
 for epoch_num in range(args.n_epochs):
 
@@ -69,7 +69,7 @@ for epoch_num in range(args.n_epochs):
         # print('Time prediction: ', pred_time - data_time)
 
         mse_loss = maskedMSE(fut_pred, fut, mask, 2)
-        nll_loss = maskedNLL(fut_pred, fut, mask, 2) #+ 1e-2*net.get_l1()
+        nll_loss = maskedNLL(fut_pred, fut, mask, 2) + 1e-2*net.get_l1()
         if args.use_nll_loss:
             loss = nll_loss
         else:
@@ -79,7 +79,7 @@ for epoch_num in range(args.n_epochs):
             continue
             # raise RuntimeError("The loss value is Nan.")
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(net.parameters(), 1)
+        # torch.nn.utils.clip_grad_norm_(net.parameters(), 0.1)
         lr_scheduler(optimizer, iter_num)
         optimizer.step()
         # step_time = timer()

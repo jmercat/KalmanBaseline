@@ -24,6 +24,7 @@ class ArgoverseDataset(Dataset):
             self.feature_size = 2
         self.random_rotation = args.random_rotation
         self.normalize_angle = args.normalize_angle
+        self.down_sampling = args.down_sampling
     def __len__(self):
         return len(self.AFL)
 
@@ -67,13 +68,19 @@ class ArgoverseDataset(Dataset):
     ## Collate function for dataloader
     def collate_fn(self, samples):
         batch_size = len(samples)
+
+        hist_len = self.hist_len // self.down_sampling
+        fut_len = self.fut_len // self.down_sampling
+        time_len = hist_len + fut_len
+
         # Initialize history, future
-        hist_batch = np.zeros([self.hist_len, batch_size, self.feature_size])
-        fut_batch = np.zeros([self.fut_len, batch_size, self.feature_size])
+        hist_batch = np.zeros([hist_len, batch_size, self.feature_size])
+        fut_batch = np.zeros([fut_len, batch_size, self.feature_size])
 
         for sampleId, trajectory in enumerate(samples):
-            hist_batch[:, sampleId, :] = trajectory[:self.hist_len, :]
-            fut_batch[:, sampleId, :] = trajectory[self.hist_len:self.time_len, :]
+            hist_batch[:, sampleId, :] = trajectory[:hist_len*self.down_sampling:self.down_sampling, :]
+            fut_batch[:, sampleId, :] = \
+                trajectory[hist_len*self.down_sampling:time_len*self.down_sampling:self.down_sampling, :]
 
         hist_batch = torch.from_numpy(hist_batch.astype('float32'))
         fut_batch = torch.from_numpy(fut_batch.astype('float32'))

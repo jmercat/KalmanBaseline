@@ -24,7 +24,6 @@ class CV_model(KalmanBasis):
         coef_G = torch.randn(self._state_size, self._state_size, requires_grad=True)
         self._coef_G = nn.Parameter(coef_G, requires_grad=True)
 
-        # self._GR = torch.tensor([[1e-1, 1e-1], [1e-1, 1e-1]])
         _GR = torch.randn((2, 2)) * 1e-1
         self._GR = nn.Parameter(_GR)
 
@@ -38,9 +37,9 @@ class CV_model(KalmanBasis):
         # Command matrix that defines how commands modify the state
         self._n_command = 2
         self._B = nn.Parameter(torch.zeros(self._state_size, self._n_command, requires_grad=False), requires_grad=False) # actions are accelerations
-        self._B[0, 0] = args.dt * args.dt / 2
-        self._B[1, 0] = args.dt
-        self._B[2, 1] = args.dt * args.dt / 2
+        self._B[0, 0] = 0#args.dt * args.dt / 2
+        self._B[1, 1] = 0#args.dt * args.dt / 2
+        self._B[2, 0] = args.dt
         self._B[3, 1] = args.dt
 
     def _init_static(self, batch_size):
@@ -70,7 +69,7 @@ class CV_model(KalmanBasis):
         Q[:, 2:, :2] *= submat
 
         if Q_corr is not None:
-            Q *= Q_corr + 1
+            Q = Q_corr.transpose(2, 1) @ Q @ Q_corr
 
         return Q
 

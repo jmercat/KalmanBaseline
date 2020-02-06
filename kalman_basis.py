@@ -14,7 +14,6 @@ class KalmanBasis(nn.Module):
         self._H_inv = nn.Parameter(self._H.transpose(1, 0), requires_grad=False)
         self._Id = nn.Parameter(torch.eye(self._state_size), requires_grad=False)
 
-        #TODO get the settings
         self.eps = args.std_threshold
         self.eps_rho = args.corr_threshold
 
@@ -48,9 +47,10 @@ class KalmanBasis(nn.Module):
         command = self._get_command(X)
         if command is not None:
             X_corr, Q_corr = self._apply_command(X, command)
-            return X_corr, torch.matmul(Q_corr, Q_corr.transpose(2, 1))
+            Id = torch.eye(self._state_size, requires_grad=False, device=self._H.device)
+            return X_corr, Q_corr + Id#torch.matmul(Q_corr, Q_corr.transpose(2, 1))
         else:
-            return 0, 0
+            return 0, None
 
     # @torch.jit.export
     def predict(self, X, P, X_corr, Q_corr):
@@ -59,8 +59,7 @@ class KalmanBasis(nn.Module):
         P = J.clone() @ P.clone() @ J.permute(0, 2, 1).clone()
         Q = self._get_Q(X, Q_corr)
         P = P + Q
-
-        X = self._pred_state(X) + X_corr
+        X = self._pred_state(X + X_corr)
 
         return X, P
 
@@ -105,16 +104,9 @@ class KalmanBasis(nn.Module):
         sigma_y = torch.clamp(torch.sqrt(P[:, 1, 1]).unsqueeze(1), self.eps, None)
         rho = torch.clamp((P[:, 0, 1] + P[:, 1, 0]).unsqueeze(1) / (2 * sigma_x * sigma_y),
                           self.eps_rho - 1, 1 - self.eps_rho)
-        if torch.mean(rho) != torch.mean(rho):
-            print('nan P')
-            # print('rho')
-            # print(rho)
-            # print('sigma_x')
-            # print(sigma_x)
-            # print('sigma_y')
-            # print(sigma_y)
-            print('P')
-            print(P[:, 0, 1] + P[:, 1, 0])
+        # if torch.mean(rho) != torch.mean(rho):
+        #     print('nan P')
+        #     print(P[:, 0, 1] + P[:, 1, 0])
             # assert False
         return sigma_x, sigma_y, rho
 
@@ -123,6 +115,7 @@ class KalmanBasis(nn.Module):
         # type: (Tensor, Tensor, Tensor, list) -> Tuple[Tensor, Tensor, list]
         # Estimate current state
         for i in range(inputs.shape[0]):
+            X_corr, Q_corr = self._get_corr(X)
             X, P = self.step(inputs[i, :, :, None], X, P)
             sigma_x, sigma_y, rho = self._P_to_sxsyrho(P)
             results.append(torch.cat((X[:, :2, 0], sigma_x, sigma_y, rho), dim=1).clone())

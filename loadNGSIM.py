@@ -55,6 +55,8 @@ class NGSIMDataset(Dataset):
         if fut.shape[0] < 5:
             return None, None
         hist = self.getHistory(vehId, t, vehId, dsId)
+        if hist.shape[0] < 5:
+            return None, None
         if self.use_yaw:
             hist = self._add_yaw(hist)
         if self.random_rotation:
@@ -90,10 +92,10 @@ class NGSIMDataset(Dataset):
                 return np.empty([0, 2])
             else:
                 stpt = np.maximum(0, np.argwhere(vehTrack[:, 0] == t).item() - self.hist_len)
-                enpt = np.argwhere(vehTrack[:, 0] == t).item() + 1
+                enpt = np.argwhere(vehTrack[:, 0] == t).item()
                 hist = vehTrack[stpt:enpt:self.down_sampling, 1:3] - refPos
 
-            if len(hist) < self.hist_len // self.down_sampling + 1:
+            if len(hist) < self.hist_len // self.down_sampling:
                 return np.empty([0, 2])
             return hist
 
@@ -109,7 +111,7 @@ class NGSIMDataset(Dataset):
     ## Collate function for dataloader
     def collate_fn(self, samples):
 
-        maxlen = self.hist_len // self.down_sampling + 1
+        maxlen = self.hist_len // self.down_sampling
 
         # Initialize history, future
         time_size = self.fut_len // self.down_sampling
@@ -119,8 +121,8 @@ class NGSIMDataset(Dataset):
         for sampleId, (hist, fut) in enumerate(samples):
             if hist is not None:
                 # Set up history, future, lateral maneuver and longitudinal maneuver batches:
-                hist_batch[0:len(hist), sampleId, :] = torch.from_numpy(hist)
-                fut_batch[0:len(fut), sampleId, :] = torch.from_numpy(fut)
+                hist_batch[-len(hist):, sampleId, :] = torch.from_numpy(hist)
+                fut_batch[:len(fut), sampleId, :] = torch.from_numpy(fut)
 
         return hist_batch, fut_batch
 

@@ -22,7 +22,7 @@ except FileNotFoundError as err:
     raise FileNotFoundError('Could not find the results file "' + './results/' + args.name +
           '.npz' + '", please run "save_results.py" before calling "stats_results.py".')
 
-n_pred = 1
+n_pred = 6
 hist_test = results['hist']
 mask_test = results['mask']
 fut_test = results['fut']
@@ -48,8 +48,8 @@ rmse_xy_test = np.sqrt(np.sum(err_test*err_test*tiled_mask, axis=1)/
 
 std_err_test = []
 std_err_pred_mean = []
-indices = ((np.arange(3) + 1)*args.time_pred/6/args.dt - 1).astype('int')
-indices2 = ((np.arange(3) + 1)*args.time_pred/6/args.dt - 1).astype('int')
+indices = ((np.arange(3) + 1)*args.time_pred/3/args.dt - 1).astype('int')
+indices2 = ((np.arange(3) + 1)*args.time_pred/3/args.dt - 1).astype('int')
 print(indices2)
 print('bias x', bias_error[indices, x_axis])
 print('bias y', bias_error[indices, y_axis])

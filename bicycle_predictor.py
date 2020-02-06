@@ -11,8 +11,8 @@ class Bicycle_model(KalmanBasis):
     which are position, yaw (heading angle), velocity, acceleration, wheel_angle
     """
     def __init__(self, args,
-                 velocity_std=10, yaw_std=2, pos_std=0.3,
-                 jerk=3, wheel_jerk=1, a_std=0.2, wheel_std=5):
+                 velocity_std=30, yaw_std=5, pos_std=5,
+                 jerk=9, wheel_jerk=3, a_std=3, wheel_std=15):
         # type: (float, float, float, float, float, float, float, float) -> None
         KalmanBasis.__init__(self, 6, 3, args)
 
@@ -25,13 +25,11 @@ class Bicycle_model(KalmanBasis):
         self._wheel_jerk = nn.Parameter(torch.ones(1) * wheel_jerk * np.pi / 180, requires_grad=True)
         self._wheel_std = nn.Parameter(torch.ones(1) * wheel_std * np.pi / 180, requires_grad=True)
 
-        # coef_G = torch.randn(self._state_size, self._state_size)*0.1 + torch.eye(self._state_size)
-        # self._coef_G = nn.Parameter(coef_G, requires_grad=True)
-
         _GR = torch.randn((3, 3))*0.001
         self._GR = nn.Parameter(_GR)
 
         self._Q_layer = nn.Linear(self._state_size + 4, self._state_size, bias=False)
+        self._Q_layer.weight.data = self._Q_layer.weight/10
         self._n_command = 2
 
         # self._Q_layer.weight.data = self._Q_layer.weight * self._Q_layer.weight
@@ -89,41 +87,9 @@ class Bicycle_model(KalmanBasis):
         in_q = torch.cat((X.squeeze(-1), cos, sin, (1 + tan_w*tan_w), curvature), dim=-1)
         G = self._Q_layer(in_q)
         Q = self._Q.clone()
-        if Q_corr is not None:
-            Q = Q * (Q_corr + 1)
         Q *= G.unsqueeze(2) @ G.unsqueeze(1)
-        return Q
-
-    def _get_Q2(self, X, Q_corr):
-        dt = self._dt
-        angle = X[:, 2].clone()
-        Q = torch.zeros((X.shape[0], self._state_size, self._state_size), device=X.device)
-        G = torch.from_numpy(np.array([dt ** 3 / 6, dt ** 2 / 2, dt]).astype('float32')).to(X.device)
-        GGt = G[:, None] @ G[None, :]
-        xva_rows = np.array([0, 3, 4])
-        for ei, i in enumerate(xva_rows):
-            for ej, j in enumerate(xva_rows):
-                Q[:, i, j] = self._jerk ** 2 * GGt[ei, ej].clone()
-        yva_rows = np.array([1, 3, 4])
-        for ei, i in enumerate(yva_rows):
-            for ej, j in enumerate(yva_rows):
-                Q[:, i, j] = self._jerk ** 2 * GGt[ei, ej].clone()
-
-        cos = torch.cos(angle)
-        sin = torch.sin(angle)
-        Q[:, 0] = Q[:, 0].clone() * cos.clone()
-        Q[:, :, 0] = Q[:, :, 0].clone() * cos.clone()
-        Q[:, 1] = Q[:, 1].clone() * sin.clone()
-        Q[:, :, 1] = Q[:, :, 1].clone() * sin.clone()
-
-        G = self._wheel_jerk * torch.from_numpy(np.array([dt ** 2 / (2 * self._vehicle_length), dt]).astype('float32')).to(X.device)
-        GGt = G[:, None] @ G[None, :]
-        tyaw_rows = np.array([2, 5])
-        for ei, i in enumerate(tyaw_rows):
-            for ej, j in enumerate(tyaw_rows):
-                Q[:, i, j] = GGt[ei, ej].clone()
         if Q_corr is not None:
-            Q *= Q_corr
+            Q = Q_corr.transpose(2, 1) @ Q @ Q_corr
         return Q
 
     def _get_R(self):
@@ -172,21 +138,6 @@ class Bicycle_model(KalmanBasis):
         u = command[:, :2]
         X_corr = torch.zeros_like(X)
         dt = self._dt
-        angle = X[:, 2, 0].clone()
-        wheel_angle = X[:, 5, 0].clone()
-        velocity = X[:, 3, 0].clone()
-        acc = X[:, 4, 0].clone()
-        tan_w = torch.tan(wheel_angle + dt / 2 * u[:, 1].clone())
-        curvature = tan_w / self._vehicle_length
-        yaw_rate = curvature * (velocity + acc * dt / 2)
-        yaw_rate_corr = curvature.clone() * (dt * dt / 4 * u[:, 0].clone())
-        velocity_05 = velocity.clone() + dt * acc / 2 + dt * dt / 4 * u[:, 0].clone()
-        sin_b = torch.sin(yaw_rate_corr.clone() * dt / 2)
-
-        X_corr[:, 0, 0] = -torch.sin(angle.clone() + yaw_rate.clone() * dt / 2) * sin_b.clone() * dt * velocity_05.clone()
-        X_corr[:, 1, 0] =  torch.cos(angle.clone() + yaw_rate.clone() * dt / 2) * sin_b.clone() * dt * velocity_05.clone()
-        X_corr[:, 2, 0] = yaw_rate_corr.clone() * dt
-        X_corr[:, 3, 0] = dt * dt / 2 * u[:, 0].clone()
         X_corr[:, 4, 0] = dt * u[:, 0].clone()
         X_corr[:, 5, 0] = dt * u[:, 1].clone()
 

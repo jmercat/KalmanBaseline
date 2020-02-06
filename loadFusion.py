@@ -48,7 +48,7 @@ class FusionDataset(Dataset):
         self.fut_len = int(args.time_pred/args.dt)
         self.time_len = self.hist_len + self.fut_len
         self.min_num_obs = 10
-        self.down_sampling = 1
+        self.down_sampling = args.down_sampling
 
     def load_dataset(self, path):
         with open(path, 'rb') as handle:
@@ -89,11 +89,11 @@ class FusionDataset(Dataset):
         assert time_len >= self.time_len
         time_len = self.time_len // self.down_sampling
         hist_len = self.hist_len // self.down_sampling
-        data_batch = np.zeros([self.time_len, len(samples), len(self.data_to_get)])
+        data_batch = np.zeros([time_len, len(samples), len(self.data_to_get)])
 
         for i, traj in enumerate(samples):
-            data_batch[:, i, :] = traj[:self.down_sampling*self.time_len:self.down_sampling, :]
+            data_batch[:, i, :] = traj[:self.down_sampling*time_len:self.down_sampling, :]
 
         data_batch = torch.from_numpy(data_batch.astype('float32'))
 
-        return data_batch[:hist_len], data_batch[hist_len:self.time_len]
+        return data_batch[:hist_len], data_batch[hist_len:time_len]

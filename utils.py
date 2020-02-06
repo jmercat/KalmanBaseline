@@ -3,8 +3,8 @@ import torch
 import yaml
 
 from bicycle_predictor import Bicycle_model
-from LSTM_CV_predictor import KalmanLSTM
 from LSTM_kalman import CV_LSTM_model, CA_LSTM_model, Bicycle_LSTM_model
+from GRU_kalman import CV_GRU_model, CA_GRU_model, Bicycle_GRU_model
 from constant_velocity_predictor import CV_model
 from constant_acceleration_predictor import CA_model
 from loadNGSIM import NGSIMDataset
@@ -20,23 +20,22 @@ class Settings:
                 if torch.cuda.is_available():
                     self.settings_dict['device'] = 'cuda'
                     print('Using device ' + torch.cuda.get_device_name())
-            self.settings_dict['use_yaw'] = self.settings_dict['model_type'] == 'Bicycle' or\
-                                            self.settings_dict['model_type'] == 'Bicycle_LSTM'
+            self.settings_dict['use_yaw'] = self.settings_dict['model_type'][:7] == 'Bicycle'
             self.settings_dict['name'] = (self.settings_dict['model_type'] + '_' +
                                           self.settings_dict['dataset'] + '_' +
                                           str(self.settings_dict['training_id']))
             if self.settings_dict['dataset'] == 'NGSIM':
-                self.settings_dict['dt'] = 0.1
+                self.settings_dict['dt'] = 0.1*self.settings_dict['down_sampling']
                 self.settings_dict['unit_conversion'] = 0.3048
                 self.settings_dict['time_hist'] = 3
                 self.settings_dict['time_pred'] = min(5, self.settings_dict['time_pred'])
             elif self.settings_dict['dataset'] == 'Argoverse':
-                self.settings_dict['dt'] = 0.1
+                self.settings_dict['dt'] = 0.1*self.settings_dict['down_sampling']
                 self.settings_dict['unit_conversion'] = 1
                 self.settings_dict['time_hist'] = 2
                 self.settings_dict['time_pred'] = min(3, self.settings_dict['time_pred'])
             elif self.settings_dict['dataset'] == 'Fusion':
-                self.settings_dict['dt'] = 0.04
+                self.settings_dict['dt'] = 0.04*self.settings_dict['down_sampling']
                 self.settings_dict['unit_conversion'] = 1
                 self.settings_dict['time_hist'] = 2
                 self.settings_dict['time_pred'] = min(3, self.settings_dict['time_pred'])
@@ -79,8 +78,8 @@ def get_dataset():
 def get_test_set():
     args = Settings()
     if args.dataset == 'NGSIM':
-        testSet = NGSIMDataset(args.NGSIM_test_data_directory + 'TestSet_traj_v2.mat',
-                             args.NGSIM_test_data_directory + 'TestSet_tracks_v2.mat', args)
+        testSet = NGSIMDataset(args.NGSIM_data_directory + 'TestSet_traj_v2.mat',
+                             args.NGSIM_data_directory + 'TestSet_tracks_v2.mat', args)
     elif args.dataset == 'Argoverse':
         testSet = ArgoverseDataset(args.argoverse_data_directory + 'val/data', args)
     elif args.dataset == 'Fusion':
@@ -91,9 +90,7 @@ def get_test_set():
 
 def get_net():
     args = Settings()
-    if args.model_type == 'LSTM':
-        net = KalmanLSTM(args)
-    elif args.model_type == 'CV':
+    if args.model_type == 'CV':
         net = CV_model(args)
     elif args.model_type == 'Bicycle':
         net = Bicycle_model(args)
@@ -105,6 +102,12 @@ def get_net():
         net = CA_LSTM_model(args)
     elif args.model_type == 'Bicycle_LSTM':
         net = Bicycle_LSTM_model(args)
+    elif args.model_type == 'CV_GRU':
+        net = CV_GRU_model(args)
+    elif args.model_type == 'CA_GRU':
+        net = CA_GRU_model(args)
+    elif args.model_type == 'Bicycle_GRU':
+        net = Bicycle_GRU_model(args)
     else:
         print('Model type ' + args.model_type + ' is not known.')
 
@@ -115,7 +118,7 @@ def get_net():
             net.load_state_dict(torch.load('./trained_models/' + args.load_name + '.tar', map_location=args.device))
         except RuntimeError as err:
             print(err)
-            print('Loading what can be loaded with strict=False option.')
+            print('Loading what can be loaded with option strict=False.')
             net.load_state_dict(torch.load('./trained_models/' + args.load_name + '.tar', map_location=args.device), strict=False)
     return net
 
@@ -131,24 +134,3 @@ def outputActivation(x):
     rho = torch.tanh(rho)
     out = torch.cat([muX, muY, sigX, sigY, rho], dim=2)
     return out
-
-class unnormalizer():
-    def __init__(self, mean, std):
-        # self.mean = torch.from_numpy(mean[1:3, 0].astype('float32'))
-        self.std = std.view(1, 1, 2)
-
-    def __call__(self, x, x0=0):
-        if isinstance(x, (list,)):
-            return [self.__call__(item) for item in x]
-        if torch.cuda.is_available():
-            x[:, :, 0:2] = x[:, :, 0:2] * self.std.cuda()  # + self.mean.cuda()
-            x[:, :, 0:2] = torch.cumsum(x[:, :, 0:2], dim=0) + x0
-            if x.shape[2] > 2:
-                x[:, :, 2:4] = x[:, :, 2:4] * self.std.cuda()
-        else:
-            x[:, :, 0:2] = x[:, :, 0:2] * self.std  # + self.mean
-            x[:, :, 0:2] = torch.cumsum(x[:, :, 0:2], dim=0) + x0
-            if x.shape[2] > 2:
-                x[:, :, 2:4] = x[:, :, 2:4] * self.std
-        return x
-
