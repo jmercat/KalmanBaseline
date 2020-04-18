@@ -69,8 +69,8 @@ class ArgoverseDataset(Dataset):
     def collate_fn(self, samples):
         batch_size = len(samples)
 
-        hist_len = self.hist_len // self.down_sampling
-        fut_len = self.fut_len // self.down_sampling
+        hist_len = self.hist_len
+        fut_len = self.fut_len
         time_len = hist_len + fut_len
 
         # Initialize history, future

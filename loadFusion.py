@@ -1,8 +1,10 @@
-from fusion_indices import *
 import torch
 from torch.utils.data import Dataset
 import numpy as np
 import pickle
+
+## Class definition :
+# 0: car, 1: bus, 2: truck, 3: motorcycle, 4: bicycle, 5: pedestrian, 6: other, 7: unknown small, 8: unknown big, 9: unknown 2 wheels, 10: unknown
 
 ## Indices of the global information in the csv files
 GLOBAL_TIME = 0
@@ -86,13 +88,13 @@ class FusionDataset(Dataset):
     def collate_fn(self, samples):
         traj = samples[0]
         time_len = traj.shape[0]
-        assert time_len >= self.time_len
-        time_len = self.time_len // self.down_sampling
-        hist_len = self.hist_len // self.down_sampling
+        assert time_len == self.time_len
+        time_len = self.time_len
+        hist_len = self.hist_len
         data_batch = np.zeros([time_len, len(samples), len(self.data_to_get)])
 
         for i, traj in enumerate(samples):
-            data_batch[:, i, :] = traj[:self.down_sampling*time_len:self.down_sampling, :]
+            data_batch[:, i, :] = traj[:time_len*self.down_sampling:self.down_sampling, :]
 
         data_batch = torch.from_numpy(data_batch.astype('float32'))
 

@@ -1,28 +1,41 @@
 
-training_id   : 1 # Identifier for the output files from this training
-model_type    : 'CV' # Bicycle, CV, CA, + suffix '_LSTM' or '_GRU'
+training_id   : '151' # Identifier for the output files from this training
+model_type    : 'CA_LSTM' # Bicycle, CV, CA, + optional suffix '_LSTM' or '_GRU'
 dataset       : 'NGSIM' # 'Argoverse', 'NGSIM', 'Fusion'
-nn_feature_size : 64
+nn_feature_size : 60
 nn_n_layers : 1
 train_kalman  : True
-num_workers   : 8 # how many subprocesses to use for data loading. ``0`` means that the data will be loaded in the main process.
+num_workers   : 0 # how many subprocesses to use for data loading. 0 means that the data will be loaded in the main process.
 load_name     : '' # Name of the weights file to load, '' for random intitialization
 use_nll_loss  : True # Set to True to train with NLL loss False to train with MSE loss
 std_threshold : 0.1 # 10cm standard deviation threshold
 corr_threshold: 0.01 # x y correlation threshold
-n_epochs      : 1000
-batch_size    : 2048
-lr            : 0.01 # Learning rate
-optimizer     : Adam # Adam, Ranger, SGD
+n_epochs      : 4
+batch_size    : 128
+lr            : 0.0003 # Learning rate
+optimizer     : SGD # Adam, Ranger, SGD
 print_every_n : 10 # Print the loss and metrics in the terminal every n batch
-device        : '' # 'cpu', 'cuda', '' put '' for default (cuda if available cpu else)
+device        : 'cpu' # 'cpu', 'cuda', '' put '' for default (cuda if available cpu else)
 time_pred : 5 # Minimum value between this and the data sequence length will be used
-down_sampling : 1
-random_rotation : False
-random_translation : False
-normalize_angle : True
+down_sampling : 1 # Downsampling factor on the data ex: 1 no downsampling, 2 only use half of the observations
+random_rotation : False # Apply random rotation to the input scene before feeding it to the model
+random_translation : False # Apply a random translation to the input scene before feeding it to the model
+normalize_angle : False # Apply a rotation to each scene to align the x axis with the ego heading
+use_class : False
+n_class : 6
+n_head : 3
 
 
 argoverse_data_directory : '../Argoverse/'
-NGSIM_data_directory : '../data/'
-fusion_data_directory : '../data_fusion/'
+#argoverse_data_directory : '../Argoverse/'
+NGSIM_data_directory : '../CS230_Project/conv_social_pooling/data/'
+NGSIM_test_data_directory : './data/'
+fusion_data_directory : '../data_fusion/SUV_TF_60kkm/'
+
+
+len_mem : 3
+max_dist : 60
+max_num_veh : 50
+pixel_per_meters : 1
+
+

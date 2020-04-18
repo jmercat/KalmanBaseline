@@ -5,16 +5,18 @@ import numpy as np
 from losses import maskedNLL, maskedMSE
 
 from utils import Settings, get_net, get_test_set
+from kalman_prediction import KalmanCV
 
 if __name__ == '__main__':
     args = Settings()
 
     net = get_net()
+    # net = KalmanCV(args.dt)
 
     testSet = get_test_set()
 
     testDataloader = DataLoader(testSet, batch_size=args.batch_size,
-                                shuffle=False, num_workers=args.num_workers, collate_fn=testSet.collate_fn)
+                                shuffle=True, num_workers=args.num_workers, collate_fn=testSet.collate_fn)
 
     net.train_flag = False
     it_testDataloader = iter(testDataloader)
@@ -25,17 +27,16 @@ if __name__ == '__main__':
     pred_test = []
     proba_man_test = []
     mask_test = []
+    # path_list = testSet.dataset['path']
+    # for j in range(100):
     for j in range(len_test):
         hist, fut = next(it_testDataloader)
-
         hist = hist.to(args.device)
         fut = fut.to(args.device)
 
         mask = torch.cumprod(1 - (fut[:, :, 0] == 0).float() * (fut[:, :, 1] == 0).float(), dim=0)
-        hist *= args.unit_conversion
-        fut *= args.unit_conversion
 
-        fut_pred = net(hist, fut.shape[0])[-fut.shape[0]:]
+        fut_pred = net(hist, None, fut.shape[0])[-fut.shape[0]:]
 
         loss = maskedNLL(fut_pred, fut, mask, 2)
 
@@ -53,5 +54,8 @@ if __name__ == '__main__':
     fut_test = np.concatenate(fut_test, axis=1).astype('float64')
     pred_test = np.concatenate(pred_test, axis=1).astype('float64')
 
-    np.savez_compressed('./results/' + args.load_name + '.npz', hist=hist_test, mask=mask_test, fut=fut_test, pred=pred_test)
+    #np.savez_compressed('./results/' + args.load_name + '.npz', hist=hist_test,
+    #                   mask=mask_test, fut=fut_test, pred=pred_test, path=path_list)
+    np.savez_compressed('./results/' + args.load_name + '.npz', hist=hist_test,
+                        mask=mask_test, fut=fut_test, pred=pred_test)
 

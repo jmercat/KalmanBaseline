@@ -27,21 +27,29 @@ def logsumexp_np(inputs, mask, keepdim=False):
         outputs = outputs.squeeze(-1)
     return outputs
 
-def simpleNLL_np(y_pred, y_gt):
-    y_pred_pos = y_pred[:, :, :2]
-    muX = y_pred_pos[:, :, 0]
-    muY = y_pred_pos[:, :, 1]
-    sigX = np.maximum(y_pred[:, :, 2], eps)
-    sigY = np.maximum(y_pred[:, :, 3], eps)
-    rho = np.clip(y_pred[:, :, 4], eps_rho-1, 1-eps_rho)
+def simpleNLL_np(y_pred, y_gt, mask=None, axis=2):
+    y_pred_pos = y_pred.take([0, 1], axis=axis)
+    muX = y_pred_pos.take(0, axis=axis)
+    muY = y_pred_pos.take(1, axis=axis)
+    sigX = np.maximum(y_pred.take(2, axis=axis), eps)
+    sigY = np.maximum(y_pred.take(3, axis=axis), eps)
+    rho = np.clip(y_pred.take(4, axis=axis), eps_rho-1, 1-eps_rho)
     ohr = 1/(1 - rho * rho)
-    x = y_gt[:, :, 0]
-    y = y_gt[:, :, 1]
+    x = y_gt.take(0, axis=axis)
+    y = y_gt.take(1, axis=axis)
     diff_x = x - muX
     diff_y = y - muY
     z = ((diff_x * diff_x) / (sigX * sigX) + (diff_y * diff_y) / (sigY * sigY) -
          (2 * rho * diff_x * diff_y) / (sigX * sigY))
     nll = 0.5 * ohr * z + np.log(sigX * sigY) - 0.5*np.log(ohr) + np.log(np.pi*2)
+    if mask is None:
+        nll = np.mean(nll, 1)
+    else:
+        if mask.shape != nll.shape:
+            mask = np.expand_dims(mask, axis=-1)
+        denom = np.sum(mask, tuple(range(1, nll.ndim)))
+        denom += denom == 0
+        nll = np.sum(nll*mask, tuple(range(1, nll.ndim))) / denom
     return nll
 
 def multiNLL_np(y_pred, y_gt, mask=None):
@@ -126,7 +134,10 @@ def maskedNLL(y_pred, y_gt, mask=None, dim=3):
         lossVal = torch.mean(nll)
     else:
         out = nll.masked_fill(mask.unsqueeze(dim) == 0, 0)
-        lossVal = torch.sum(out)/torch.sum(mask)
+        if torch.sum(mask) > 0:
+            lossVal = torch.sum(out)/torch.sum(mask)
+        else:
+            lossVal = torch.sum(out)
     return lossVal
 
 
@@ -138,7 +149,11 @@ def maskedMSE(y_pred, y_gt, mask=None, dim=3):
     diff_x = x - muX
     diff_y = y - muY
     if mask is not None:
-        output = torch.sum((diff_x*diff_x + diff_y*diff_y)*mask.unsqueeze(dim))/torch.sum(mask)
+        output = torch.sum((diff_x*diff_x + diff_y*diff_y)*mask.unsqueeze(dim))
+        if torch.sum(mask) > 0:
+            output = torch.sum(output)/torch.sum(mask)
+        else:
+            output = torch.sum(output)
     else:
         output = torch.mean(diff_x*diff_x + diff_y*diff_y)
     return output

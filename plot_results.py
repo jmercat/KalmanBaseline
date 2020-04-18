@@ -71,9 +71,6 @@ net.eval()
 
 data_set = get_test_set()
 
-tsDataloader = DataLoader(data_set, batch_size=len(data_set), shuffle=True,
-                          num_workers=8, collate_fn=data_set.collate_fn)
-
 len_pred = int(args.time_pred/args.dt)
 lossVals = torch.zeros(len_pred).to(args.device)
 counts = torch.zeros(len_pred).to(args.device)
@@ -165,12 +162,8 @@ class VisualizationPlot(object):
         hist, fut = data_set.collate_fn(batch)
         self.current_frame += 1
 
-        # Initialize Variables
-        hist = hist.to(args.device) * args.unit_conversion
-        fut = fut.to(args.device) * args.unit_conversion
-
         # Forward pass
-        fut_pred = net(hist, fut.shape[0])
+        fut_pred = net(hist, None, fut.shape[0])
 
         hist = hist.detach()
         fut = fut.detach()

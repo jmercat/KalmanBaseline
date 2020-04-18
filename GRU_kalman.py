@@ -22,7 +22,7 @@ class GRUKalman(KalmanBasis):
 
         self.command_out = nn.Linear(self._feature_size, self._n_command + self._state_size * self._state_size)
         self.command_out.weight.data = self.command_out.weight/10
-        self.command_out.bias.data = self.command_out.bias*0
+        nn.init.zeros_(self.command_out.bias)
 
     def _init_static(self, batch_size):
         super(GRUKalman, self)._init_static(batch_size)

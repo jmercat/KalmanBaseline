@@ -8,17 +8,17 @@ class CA_model(KalmanBasis):
         KalmanBasis.__init__(self, 6, 2, args)
         self.dt = args.dt
 
-        self._position_std_x = nn.Parameter(torch.ones(1) * 5)
-        self._position_std_y = nn.Parameter(torch.ones(1) * 5)
-        self._velocity_std_x = nn.Parameter(torch.ones(1) * 10)
-        self._velocity_std_y = nn.Parameter(torch.ones(1) * 10)
-        self._acceleration_std_x = nn.Parameter(torch.ones(1) * 5)
-        self._acceleration_std_y = nn.Parameter(torch.ones(1) * 5)
-        self._jerk_std_x = nn.Parameter(torch.ones(1) * 3)
-        self._jerk_std_y = nn.Parameter(torch.ones(1) * 3)
+        self._position_std_x = nn.Parameter(torch.ones(1) * 0.1)
+        self._position_std_y = nn.Parameter(torch.ones(1) * 3.2)
+        self._velocity_std_x = nn.Parameter(torch.ones(1) * 0.2)
+        self._velocity_std_y = nn.Parameter(torch.ones(1) * 8)
+        self._acceleration_std_x = nn.Parameter(torch.ones(1) * 1)
+        self._acceleration_std_y = nn.Parameter(torch.ones(1) * 2.7)
+        self._jerk_std_x = nn.Parameter(torch.ones(1) * 1)
+        self._jerk_std_y = nn.Parameter(torch.ones(1) * 1)
         self._n_command = 2
 
-        coef_G = torch.randn(self._state_size, self._state_size)
+        coef_G = torch.randn(self._state_size)
         self._coef_G = nn.Parameter(coef_G)
 
         GR = torch.randn(2, 2)
@@ -46,38 +46,41 @@ class CA_model(KalmanBasis):
         self._B[4, 0] = dt
         self._B[5, 1] = dt
 
-    def _init_static(self, batch_size):
-        self._Q = self._init_Q(batch_size)
-
     def _get_jacobian(self, X):
         return self._F.unsqueeze(0).repeat(X.shape[0], 1, 1)
 
     def _get_Q(self, X, Q_corr):
-        Q = self._Q.clone().unsqueeze(0).repeat((X.shape[0], 1, 1))
+        Q = self._init_Q().clone().unsqueeze(0).repeat((X.shape[0], 1, 1))
         jx2 = self._jerk_std_x * self._jerk_std_x
         jy2 = self._jerk_std_y * self._jerk_std_y
         jxy = self._jerk_std_x * self._jerk_std_y
 
-        submat = torch.empty((1, 2, 2), device=X.device)
+        submat = torch.zeros((1, self._state_size, self._state_size), device=X.device)
         submat[0, 0, 0] = jx2
         submat[0, 1, 1] = jy2
-        submat[0, 0, 1] = jxy
-        submat[0, 1, 0] = jxy
+        submat[0, 2, 2] = jx2
+        submat[0, 3, 3] = jy2
+        submat[0, 4, 4] = jx2
+        submat[0, 5, 5] = jy2
 
-        Q *= submat.repeat((Q.shape[0], 3, 3))
-
-        if Q_corr is not None:Q = Q_corr.transpose(2, 1) @ Q @ Q_corr
-
+        if Q_corr is not None:
+            # Q = Q_corr.transpose(2, 1) @ Q @ Q_corr
+            Q = Q_corr
+        else:
+            Q = torch.matmul(Q, submat)
 
         return Q
 
-    def _init_Q(self, batch_size):
-        Rho = torch.matmul(self._coef_G, self._coef_G.transpose(1, 0))
-        G = torch.zeros(self._state_size, requires_grad=False, device=self._H.device)
-        G[0:2] = self._dt * self._dt * self._dt / 6
-        G[2:4] = self._dt * self._dt / 2
-        G[4:6] = self._dt
-        Q = torch.matmul(G.unsqueeze(1), G.unsqueeze(0)) * Rho
+    def _init_Q(self):
+        G = torch.zeros((self._state_size, 2), requires_grad=False, device=self._H.device)
+        G[0, 0] = self._dt * self._dt * self._dt / 6
+        G[1, 1] = self._dt * self._dt * self._dt / 6
+        G[2, 0] = self._dt * self._dt / 2
+        G[3, 1] = self._dt * self._dt / 2
+        G[4, 0] = self._dt
+        G[5, 1] = self._dt
+        Q = torch.matmul((G * torch.tanh(self._coef_G).unsqueeze(1)),
+                         (G * torch.tanh(self._coef_G).unsqueeze(1)).transpose(1, 0))
         return Q
 
     def _get_R(self):
@@ -95,6 +98,19 @@ class CA_model(KalmanBasis):
         P[:, 4, 4] = self._acceleration_std_x * self._acceleration_std_x
         P[:, 5, 5] = self._acceleration_std_y * self._acceleration_std_y
         return P
+
+    def _init_X(self, Z):
+        V = (Z[1] - Z[0]).clone()/self._dt
+        A = (Z[2] + Z[0] - 2*Z[1]).clone()/(self._dt * self._dt)
+
+        X = torch.zeros((Z.shape[1], self._state_size), device=Z.device)
+        X[:, 0] = Z[0, :, 0]
+        X[:, 1] = Z[0, :, 1]
+        X[:, 2] = V[:, 0]
+        X[:, 3] = V[:, 1]
+        X[:, 4] = A[:, 0]
+        X[:, 5] = A[:, 1]
+        return X[:, :, None]
 
     def _apply_command(self, X, command):
         u = command[:, :2]
