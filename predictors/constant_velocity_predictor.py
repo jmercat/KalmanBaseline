@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-import numpy as np
 
-from kalman_basis import KalmanBasis
+from predictors.kalman_basis import KalmanBasis
 
 
 class CV_model(KalmanBasis):

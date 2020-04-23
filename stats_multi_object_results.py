@@ -7,7 +7,7 @@ from matplotlib.lines import Line2D
 import streamlit as st
 import pandas as pd
 
-from utils import Settings
+from utils.utils import Settings
 from losses import simpleNLL_np, multiNLL_np
 
 class StatMultiObject:

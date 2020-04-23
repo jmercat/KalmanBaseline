@@ -1,14 +1,11 @@
 import torch
 from torch.utils.data import DataLoader
-import torch.jit as jit
-from ranger import Ranger
-import numpy as np
+from utils.ranger import Ranger
 
 from torch.utils.tensorboard import SummaryWriter
 from losses import maskedNLL, maskedMSE
-from utils import Settings, make_dir
+from utils.utils import Settings, make_dir
 from multi_object.utils import get_multi_object_dataset, get_multi_object_net
-from timeit import default_timer as timer
 
 args = Settings()
 

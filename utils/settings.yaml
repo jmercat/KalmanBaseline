@@ -1,6 +1,6 @@
 
 training_id   : '151' # Identifier for the output files from this training
-model_type    : 'CA_LSTM' # Bicycle, CV, CA, + optional suffix '_LSTM' or '_GRU'
+model_type    : 'CV' # Bicycle, CV, CA, + optional suffix '_LSTM' or '_GRU'
 dataset       : 'NGSIM' # 'Argoverse', 'NGSIM', 'Fusion'
 nn_feature_size : 60
 nn_n_layers : 1
@@ -17,7 +17,7 @@ optimizer     : SGD # Adam, Ranger, SGD
 print_every_n : 10 # Print the loss and metrics in the terminal every n batch
 device        : 'cpu' # 'cpu', 'cuda', '' put '' for default (cuda if available cpu else)
 time_pred : 5 # Minimum value between this and the data sequence length will be used
-down_sampling : 1 # Downsampling factor on the data ex: 1 no downsampling, 2 only use half of the observations
+down_sampling : 2 # Downsampling factor on the data ex: 1 no downsampling, 2 only use half of the observations
 random_rotation : False # Apply random rotation to the input scene before feeding it to the model
 random_translation : False # Apply a random translation to the input scene before feeding it to the model
 normalize_angle : False # Apply a rotation to each scene to align the x axis with the ego heading

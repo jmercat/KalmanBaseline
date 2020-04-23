@@ -3,20 +3,20 @@ import torch
 import yaml
 import os
 
-from bicycle_predictor import Bicycle_model
-from LSTM_kalman import CV_LSTM_model, CA_LSTM_model, Bicycle_LSTM_model
-from GRU_kalman import CV_GRU_model, CA_GRU_model, Bicycle_GRU_model
-from constant_velocity_predictor import CV_model
-from constant_acceleration_predictor import CA_model
-from loadNGSIM import NGSIMDataset
+from predictors.bicycle_predictor import Bicycle_model
+from NNpredictors.LSTM_kalman import CV_LSTM_model, CA_LSTM_model, Bicycle_LSTM_model
+from NNpredictors.GRU_kalman import CV_GRU_model, CA_GRU_model, Bicycle_GRU_model
+from predictors.constant_velocity_predictor import CV_model
+from predictors.constant_acceleration_predictor import CA_model
+from loaders.loadNGSIM import NGSIMDataset
 # from loadArgoverse import ArgoverseDataset
-from loadFusion import FusionDataset
-from multi_object.loadMultiObjectFusion import MultiObjectFusionDataset
+from loaders.loadFusion import FusionDataset
+
 
 class Settings:
     class __Settings:
         def __init__(self):
-            self.settings_dict = yaml.safe_load(open('./settings.yaml'))
+            self.settings_dict = yaml.safe_load(open('settings.yaml'))
             self.refresh()
 
         def refresh(self):

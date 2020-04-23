@@ -6,7 +6,7 @@ from matplotlib.patches import Ellipse
 from matplotlib.lines import Line2D
 from matplotlib_scalebar.scalebar import ScaleBar
 
-from utils import Settings
+from utils.utils import Settings
 from losses import simpleNLL_np, multiNLL_np
 
 args = Settings()

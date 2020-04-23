@@ -5,7 +5,7 @@ from matplotlib.patches import Ellipse, Rectangle, Circle
 from matplotlib.lines import Line2D
 from matplotlib_scalebar.scalebar import ScaleBar
 
-from utils import Settings
+from utils.utils import Settings
 from plotter.plot_utils import vehicle_types, ObjectData, VehicleData, CarData
 
 

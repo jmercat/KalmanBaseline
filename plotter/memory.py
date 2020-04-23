@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
-import numpy as np
-from kalman_basis import KalmanBasis
+from predictors.kalman_basis import KalmanBasis
 
 class MemoryData:
     """ Keeps in memory the current sequence being predicted to compute only the update when predicting trajectories."""

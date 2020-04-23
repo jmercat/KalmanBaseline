@@ -3,7 +3,7 @@ import os
 import streamlit as st
 import numpy as np
 import pandas as pd
-from utils import Settings, get_dataset, get_net, get_test_set
+from utils.utils import Settings, get_dataset, get_net, get_test_set
 from multi_object.utils import get_multi_object_net, get_multi_object_test_set
 from plotter.plot_utils import vehicle_types, ObjectData, VehicleData, CarData
 # from plotter.plot_pyplot import ScenePlotter

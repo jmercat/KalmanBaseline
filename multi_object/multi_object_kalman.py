@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
-from kalman_basis import KalmanBasis
-from constant_velocity_predictor import CV_model
-from constant_acceleration_predictor import CA_model
-from bicycle_predictor import Bicycle_model
+from predictors.kalman_basis import KalmanBasis
 from multi_object.multi_head_attention import MultiHeadAttention
 
 

@@ -4,7 +4,7 @@ import numpy as np
 
 from losses import maskedNLL, maskedMSE
 
-from utils import Settings, get_net, get_test_set
+from utils.utils import Settings, get_net, get_test_set
 from kalman_prediction import KalmanCV
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 from torch.utils.data import DataLoader
 
 from multi_object.utils import get_multi_object_net, get_multi_object_test_set
-from utils import Settings
+from utils.utils import Settings
 import pickle
 
 args = Settings()

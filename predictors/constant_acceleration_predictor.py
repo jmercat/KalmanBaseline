@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from kalman_basis import KalmanBasis
+from predictors.kalman_basis import KalmanBasis
 
 class CA_model(KalmanBasis):
 

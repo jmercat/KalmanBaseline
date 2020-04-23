@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 
-from utils import Settings
+from utils.utils import Settings
 from plotter.plot_utils import vehicle_types, ObjectData, VehicleData, CarData
 
 

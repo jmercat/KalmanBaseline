@@ -1,15 +1,14 @@
 import torch
-from utils import Settings
+from utils.utils import Settings
 from multi_object.loadMultiObjectFusion import MultiObjectFusionDataset
 from multi_object.loadMultiObjectNGSIM import MultiObjectNGSIMDataset
 from multi_object.loadMultiObjectArgoverse import MultiObjectArgoverseDataset
 from multi_object.multi_object_kalman import MultiObjectKalman
-from bicycle_predictor import Bicycle_model
-from LSTM_kalman import CV_LSTM_model, CA_LSTM_model, Bicycle_LSTM_model
-from GRU_kalman import CV_GRU_model, CA_GRU_model, Bicycle_GRU_model
-from constant_velocity_predictor import CV_model
-from constant_acceleration_predictor import CA_model
-import os, sys, inspect
+from predictors.bicycle_predictor import Bicycle_model
+from NNpredictors.LSTM_kalman import CV_LSTM_model, CA_LSTM_model, Bicycle_LSTM_model
+from predictors.constant_velocity_predictor import CV_model
+from predictors.constant_acceleration_predictor import CA_model
+import os, sys
 import numpy as np
 
 def xytheta2xy(h, dim):

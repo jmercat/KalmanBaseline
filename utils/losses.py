@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from utils import Settings
+from utils.utils import Settings
 
 args = Settings()
 

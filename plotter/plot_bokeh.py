@@ -1,11 +1,9 @@
 import numpy as np
 from bokeh.plotting import figure
 from bokeh.models.glyphs import Rect, Line, Circle, Ellipse
-from bokeh.models import ColumnDataSource, Arrow, NormalHead, MultiLine, Triangle
+from bokeh.models import ColumnDataSource, Triangle
 from bokeh.palettes import Category10
-from bokeh.models import BoxSelectTool, TapTool
-from utils import Settings
-from plotter.plot_utils import vehicle_types, ObjectData, VehicleData, CarData
+from utils.utils import Settings
 
 
 class ScenePlotter:
