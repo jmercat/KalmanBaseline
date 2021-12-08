@@ -28,8 +28,9 @@ n_head : 3
 
 argoverse_data_directory : '../Argoverse/'
 #argoverse_data_directory : '../Argoverse/'
-NGSIM_data_directory : '../CS230_Project/conv_social_pooling/data/'
-NGSIM_test_data_directory : './data/'
+NGSIM_data_directory : './data/NGSIM/'
+NGSIM_test_data_directory : './data/NGSIM/'
+default_NGSIM_model : 'CV_NGSIM_143_bis'
 fusion_data_directory : '../data_fusion/SUV_TF_60kkm/'
 
 

@@ -26,9 +26,14 @@ class PlotInterface:
         self.filter = None
         self._data = None
         self._model_type = None
-        self._model_dir = self.args.models_path + 'unique_object/'
+        self._model_dir = os.path.join(self.args.models_path, 'unique_object')
         self.controls = {}
         self.scene_plotter = ScenePlotter(self._set_head_selection)
+        self.known_dir_list = ['unique_object', 'multi_object', 'multi_pred']
+        self.model_types = ['mono', 'multi_obj', 'multi_pred']
+        self.model_types_labels = ["Mono-object", "Multi-objects", "Multi-pred"]
+        self.model_sub_types = ['CV', 'CA', 'Bicycle', 'CV_LSTM', 'CA_LSTM', 'Bicycle_LSTM',  'nn_attention']
+        self.know_dataset_list = ['NGSIM', 'Argoverse', 'Fusion']
 
         ### initialization of the interface
 
@@ -49,17 +54,11 @@ class PlotInterface:
                     self.controls['net'].value = None
 
         def update_model_type():
-            if self.controls['multi_mono_object'].active == 0:
-                self._model_type = 'mono'
-                self._model_dir = self.args.models_path + 'unique_object/'
-            elif self.controls['multi_mono_object'].active == 1:
-                self._model_type = 'multi_obj'
-                self._model_dir = self.args.models_path + 'multi_objects/'
-            elif self.controls['multi_mono_object'].active == 2:
-                self._model_type = 'multi_pred'
-                self._model_dir = self.args.models_path + 'multi_pred/'
-            model_types = ['CV', 'CA', 'Bicycle', 'CV_LSTM', 'CA_LSTM', 'Bicycle_LSTM',  'nn_attention']
-            existing_types = [type for type in model_types if os.path.isdir(self._model_dir + type)]
+
+            self._model_type = self.model_types[self.controls['multi_mono_object'].active]
+            self._model_dir = os.path.join(self.args.models_path, self.known_dir_list[self.controls['multi_mono_object'].active])
+            
+            existing_types = [type for type in self.model_sub_types if os.path.isdir(os.path.join(self._model_dir, type))]
             self.controls['model_sub_type'].options = existing_types
             print('existing types')
             print(existing_types)
@@ -71,7 +70,7 @@ class PlotInterface:
 
         def set_model_sub_type():
             if self.controls['model_sub_type'].value is not None:
-                self._model_dir = self._model_dir + self.controls['model_sub_type'].value + '/'
+                self._model_dir = os.path.join(self._model_dir, self.controls['model_sub_type'].value)
                 self.args.model_type = self.controls['model_sub_type'].value
             else:
                 self._model_dir = None
@@ -81,14 +80,26 @@ class PlotInterface:
             print(self._model_dir)
             self._set_data_getter()
             print('___')
-
-        multi_mono_object = RadioButtonGroup(labels=["Mono-object", "Multi-objects", "Multi-pred"], active=1)
+        
+        dir_list = [fn for fn in os.listdir(self.args.models_path) if os.path.isdir(os.path.join(self.args.models_path, fn))]
+        dir_list = [value for value in dir_list if value in self.known_dir_list]
+        if not dir_list:
+            raise RuntimeError(f'It appears that there is no known saved models in the model path {self.args.models_path}')
+        else:
+            active_num = np.argwhere(dir_list[0] == np.array(self.known_dir_list))[0, 0]
+        multi_mono_object = RadioButtonGroup(labels=self.model_types_labels, active=active_num)
         self.controls['multi_mono_object'] = multi_mono_object
         multi_mono_object.on_change('active', update_multi_mono_object)
 
         ## Model sub type selector
-        model_types = ['CV', 'CA', 'Bicycle', 'CV_LSTM', 'CA_LSTM', 'Bicycle_LSTM',  'nn_attention']
-        model_sub_type = Select(title='Select model type:', value=model_types[3], options=model_types)
+        dir_to_look = os.path.join(self.args.models_path, dir_list[0])
+        sub_dir_list = [fn for fn in os.listdir(dir_to_look) if os.path.isdir(os.path.join(dir_to_look, fn))]
+        sub_dir_list = [value for value in sub_dir_list if value in self.model_sub_types]
+        if not dir_list:
+            raise RuntimeError(f'It appears that there is no known saved models subtype in the model path {dir_to_look}')
+        else:
+            active_num = np.argwhere(sub_dir_list[0] == np.array(self.model_sub_types))[0, 0]
+        model_sub_type = Select(title='Select model type:', value=self.model_sub_types[active_num], options=self.model_sub_types)
         self.controls['model_sub_type'] = model_sub_type
         model_sub_type.on_change('value', lambda att, old, new: update_model_type())
 
@@ -98,8 +109,7 @@ class PlotInterface:
         select.on_change('value', lambda att, old, new: self._set_data_getter())
 
         ## Select dataset to use
-        dataset_list = ['Argoverse', 'Fusion', 'NGSIM']
-        select = Select(title='Dataset:', value=dataset_list[0], options=dataset_list)
+        select = Select(title='Dataset:', value=self.know_dataset_list[0], options=self.know_dataset_list)
         self.controls['dataset'] = select
         select.on_change('value', lambda att, old, new: self._set_data_getter(change_index=True))
 
@@ -251,10 +261,10 @@ class PlotInterface:
         # TODO : add default Kalman filters for each dataset, use them to evaluate velocity
         prev_load_name = self.args.load_name
         if self.args.dataset == 'NGSIM':
-            self.args.load_name = 'CV_NGSIM_143_bis'
+            self.args.load_name = self.args.default_NGSIM_model
             self.filter = get_net()
         elif self.args.dataset in ['Argoverse', 'Fusion']:
-            print('No default filter for ' + self.args.dataset)
+            print(f'No default filter for {self.args.dataset}')
             self.filter = None
         self.args.load_name = prev_load_name
 

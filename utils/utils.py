@@ -16,7 +16,7 @@ from loaders.loadFusion import FusionDataset
 class Settings:
     class __Settings:
         def __init__(self):
-            self.settings_dict = yaml.safe_load(open('settings.yaml'))
+            self.settings_dict = yaml.safe_load(open('utils/settings.yaml'))
             self.refresh()
 
         def refresh(self):

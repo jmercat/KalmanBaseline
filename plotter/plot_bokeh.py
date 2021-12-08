@@ -1,7 +1,7 @@
 import numpy as np
 from bokeh.plotting import figure
 from bokeh.models.glyphs import Rect, Line, Circle, Ellipse
-from bokeh.models import ColumnDataSource, Triangle
+from bokeh.models import ColumnDataSource, Scatter
 from bokeh.palettes import Category10
 from utils.utils import Settings
 
@@ -38,7 +38,7 @@ class ScenePlotter:
         self.n_lanes = 0
 
         self.source_arrow = [[], []]
-        self.arrow_glyph = Triangle(x='x', y='y', angle='angle', size='size', line_color=None)
+        self.arrow_glyph = Scatter(x='x', y='y', angle='angle', size='size', marker='triangle', line_color=None)
         self.arrow_glyph_list = []
 
         self.source_path_fut = []
@@ -124,7 +124,7 @@ class ScenePlotter:
                     self._arrow_glyph(i*len(self.active_heads) + h, x_start, y_start, x_end, y_end, width, color_index=h)
         else:
             self.head_selection([])
-            print('width is None')
+            print('Attention matrix is None')
 
     def remove_objects(self):
         self.clear_arrows()

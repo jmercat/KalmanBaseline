@@ -7,9 +7,9 @@ To use this code :
 * Set the parameters, dataset path settings.yaml (The Bicycle model may show training unstabilities, contributions are welcome.)
 * Run train_kalman_predict.py starts the trainning.
 * Enter the name of the trained model in the load_name field of settings.yaml (should be in the form \<model>\_\<dataset>\_\<id>) 
-* Run plot_results.py to plot trajectory samples, estimated position and predictions
-* Run save_results.py to save the prediction results computed on the test set
-* Run stats_results.py to print metrics evaluation, plot covariance matching and error histogram (from the saved results)
+* Run `bokeh serve --show plot_interactive.py` to open an interactive plot in the browser
+* Run `python save_results.py` to save the prediction results computed on the test set
+* Run `python stats_results.py` to print metrics evaluation, plot covariance matching and error histogram (from the saved results)
 
 #Datasets
 

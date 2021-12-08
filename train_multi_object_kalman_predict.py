@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from utils.ranger import Ranger
 
 from torch.utils.tensorboard import SummaryWriter
-from losses import maskedNLL, maskedMSE
+from utils.losses import maskedNLL, maskedMSE
 from utils.utils import Settings, make_dir
 from multi_object.utils import get_multi_object_dataset, get_multi_object_net
 

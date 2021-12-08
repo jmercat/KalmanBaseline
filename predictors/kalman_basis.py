@@ -86,7 +86,7 @@ class KalmanBasis(nn.Module):
         S = self._H @ P @ self._H_inv + R
 
         # Solving linear equation
-        K, _ = torch.solve(self._H @ P.transpose(2, 1), S.transpose(2, 1))
+        K = torch.linalg.lstsq(S.transpose(2, 1), self._H @ P.transpose(2, 1)).solution
         K = K.transpose(2, 1)
         # Inverting S
         # K = P @ self._H_inv @ S.inverse()
