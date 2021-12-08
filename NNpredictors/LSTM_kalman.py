@@ -55,7 +55,7 @@ class LSTMKalman(KalmanBasis):
         return command_out, (self.hx_list, self.cx_list)
 
 
-# Mix-in Kalman classes with LSTM command prkedictions
+# Mix-in Kalman classes with LSTM command predictions
 def set_training(model, requires_grad):
     for param in model.parameters():
         param.requires_grad = requires_grad

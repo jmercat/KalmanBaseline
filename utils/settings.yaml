@@ -13,14 +13,14 @@ corr_threshold: 0.01 # x y correlation threshold
 n_epochs      : 4
 batch_size    : 128
 lr            : 0.0003 # Learning rate
-optimizer     : SGD # Adam, Ranger, SGD
-print_every_n : 10 # Print the loss and metrics in the terminal every n batch
+optimizer     : Adam # Adam, Ranger, SGD
+print_every_n : 100 # Print the loss and metrics in the terminal every n batch
 device        : 'cpu' # 'cpu', 'cuda', '' put '' for default (cuda if available cpu else)
 time_pred : 5 # Minimum value between this and the data sequence length will be used
 down_sampling : 2 # Downsampling factor on the data ex: 1 no downsampling, 2 only use half of the observations
 random_rotation : False # Apply random rotation to the input scene before feeding it to the model
 random_translation : False # Apply a random translation to the input scene before feeding it to the model
-normalize_angle : False # Apply a rotation to each scene to align the x axis with the ego heading
+normalize_angle : True # Apply a rotation to each scene to align the x axis with the ego heading
 use_class : False
 n_class : 6
 n_head : 3

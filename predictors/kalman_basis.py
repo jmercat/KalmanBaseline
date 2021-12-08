@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from torch import Tensor
+from typing import Tuple
 
 class KalmanBasis(nn.Module):
 
@@ -69,7 +71,7 @@ class KalmanBasis(nn.Module):
 
     # @torch.jit.export
     def predict(self, X, P, X_corr, Q_corr):
-        # type: (Tensor, Tensor, float) -> Tuple[Tensor, Tensor]
+        # type: (Tensor, Tensor, Tensor, float) -> Tuple[Tensor, Tensor]
         J = self._get_jacobian(X.clone())
         P = J.clone() @ P.clone() @ J.permute(0, 2, 1).clone()
         Q = self._get_Q(X, Q_corr)
@@ -86,10 +88,10 @@ class KalmanBasis(nn.Module):
         S = self._H @ P @ self._H_inv + R
 
         # Solving linear equation
-        K = torch.linalg.lstsq(S.transpose(2, 1), self._H @ P.transpose(2, 1)).solution
-        K = K.transpose(2, 1)
+        # K = torch.linalg.lstsq(S.transpose(2, 1), self._H @ P.transpose(2, 1)).solution # Gradient through lstsq is not implemented
+        # K = K.transpose(2, 1)
         # Inverting S
-        # K = P @ self._H_inv @ S.inverse()
+        K = P @ self._H_inv @ S.inverse()
 
         X = X + K @ Y
 
@@ -148,7 +150,6 @@ class KalmanBasis(nn.Module):
         return X, P, results
 
     def forward(self, inputs, mask=None, lanes=None, lanes_mask=None, len_pred=30, keep_state=False):
-        # type: (Tensor, int) -> Tensor
 
         X, P = self.init(inputs)
         X, P, results = self._iter_estimate(inputs, X, P, [])
